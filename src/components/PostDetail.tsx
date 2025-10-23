@@ -806,7 +806,7 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
 
         {/* Post info bar */}
         <div className="flex items-center gap-6 py-3 rounded-lg flex-wrap sm:flex-nowrap">
-          {/* Image count pill and last sync */}
+          {/* Image count pill and Post ID */}
           <div className="flex items-center gap-3">
             <div className="bg-gray-900 text-white px-4 py-2 rounded-full flex items-center">
               <span className="text-sm font-semibold tracking-tight leading-none">
@@ -814,12 +814,10 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
               </span>
             </div>
 
-            {/* Last sync date */}
-            {lastSyncDate && (
-              <div className="hidden sm:flex items-center">
-                <span className="text-base font-normal text-gray-900 tracking-tight">Last synced: {lastSyncDate}</span>
-              </div>
-            )}
+            {/* Post ID */}
+            <div className="hidden sm:flex items-center">
+              <span className="text-base font-normal text-gray-900 tracking-tight">Post #{postId}</span>
+            </div>
           </div>
 
           {/* Divider */}
@@ -827,43 +825,39 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
 
           {/* Action buttons */}
           <div className="flex items-center gap-4 h-9">
-            {sourceView === 'myposts' && (
-              <>
-                <button
-                  onClick={() => setEditMode(!editMode)}
-                  className={`p-1.5 rounded transition-all ${
-                    editMode
-                      ? 'text-red-600 hover:bg-white'
-                      : 'text-gray-900 hover:bg-white'
-                  }`}
-                  title={editMode ? "Stop Editing" : "Edit Mode"}
-                >
-                  {editMode ? (
-                    <PencilOff className="w-5 h-5" />
-                  ) : (
-                    <Pencil className="w-5 h-5" />
-                  )}
-                </button>
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className={`p-1.5 rounded transition-all ${
+                editMode
+                  ? 'text-red-600 hover:bg-white'
+                  : 'text-gray-900 hover:bg-white'
+              }`}
+              title={editMode ? "Stop Editing" : "Edit Mode"}
+            >
+              {editMode ? (
+                <PencilOff className="w-5 h-5" />
+              ) : (
+                <Pencil className="w-5 h-5" />
+              )}
+            </button>
 
-                <button
-                  onClick={handleSyncImages}
-                  disabled={syncing}
-                  className="p-1.5 rounded text-gray-900 hover:bg-white transition-all disabled:text-gray-400 disabled:cursor-not-allowed"
-                  title="Sync Images"
-                >
-                  <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
-                </button>
+            <button
+              onClick={handleSyncImages}
+              disabled={syncing}
+              className="p-1.5 rounded text-gray-900 hover:bg-white transition-all disabled:text-gray-400 disabled:cursor-not-allowed"
+              title="Sync Images"
+            >
+              <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+            </button>
 
-                <button
-                  onClick={handleDownloadAll}
-                  disabled={downloading || images.length === 0}
-                  className="p-1.5 rounded text-gray-900 hover:bg-white transition-all disabled:text-gray-400 disabled:cursor-not-allowed"
-                  title="Download All Images"
-                >
-                  <Download className="w-5 h-5" />
-                </button>
-              </>
-            )}
+            <button
+              onClick={handleDownloadAll}
+              disabled={downloading || images.length === 0}
+              className="p-1.5 rounded text-gray-900 hover:bg-white transition-all disabled:text-gray-400 disabled:cursor-not-allowed"
+              title="Download All Images"
+            >
+              <Download className="w-5 h-5" />
+            </button>
 
             <a
               href={`https://civitai.com/posts/${postId}`}

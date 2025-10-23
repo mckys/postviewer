@@ -907,7 +907,7 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
               }`}
             >
               <span
-                className={`h-[18px] w-[24px] rounded bg-white transition-transform ${
+                className={`h-[18px] w-[24px] rounded-sm bg-white transition-transform ${
                   showNSFW ? 'translate-x-[26px]' : 'translate-x-0'
                 }`}
               />
