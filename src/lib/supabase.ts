@@ -28,6 +28,9 @@ export interface Creator {
   avatar_url: string | null;
   added_at: string;
   updated_at: string;
+  sync_status?: string;
+  total_posts?: number;
+  actual_post_count?: number;
 }
 
 /**

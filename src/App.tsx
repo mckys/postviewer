@@ -1,7 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { Navigation } from './components/Navigation';
 import { Feed } from './components/Feed';
-import { ImageGrid } from './components/ImageGrid';
 import { Settings } from './components/Settings';
 import { MyPosts } from './components/MyPosts';
 import { Favorites } from './components/Favorites';
@@ -727,7 +726,6 @@ function App() {
           <HiddenPosts
             onPostClick={handlePostClick}
             onCreatorClick={handleCreatorClick}
-            onBack={() => setCurrentView('settings')}
           />
         )}
       </div>

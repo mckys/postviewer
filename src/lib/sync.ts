@@ -31,13 +31,14 @@ export async function syncCreator(
 
   try {
     // Get current user ID
-    const userId = options?.userId;
+    let syncOptions = options || {};
+    const userId = syncOptions.userId;
     if (!userId) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error('User must be logged in to sync creators');
       }
-      options = { ...options, userId: user.id };
+      syncOptions = { ...syncOptions, userId: user.id };
     }
 
     // Get creator info to check last synced cursor (filtered by user)
@@ -45,7 +46,7 @@ export async function syncCreator(
       .from('creators')
       .select('last_cursor, total_posts')
       .eq('username', username)
-      .eq('user_id', options.userId)
+      .eq('user_id', syncOptions.userId!)
       .maybeSingle();
 
     const lastCursor = creatorInfo?.last_cursor || null;
@@ -54,7 +55,7 @@ export async function syncCreator(
     console.log(`📊 Existing posts in DB: ${existingPosts}`);
 
     const isInitialSync = !lastCursor && existingPosts === 0;
-    const isFullBackfill = options?.fullBackfill || false;
+    const isFullBackfill = syncOptions.fullBackfill || false;
 
     // Always start from beginning to catch new posts (cursor points to old data)
     // We'll stop when we hit posts we've already seen
@@ -65,7 +66,7 @@ export async function syncCreator(
       .from('creators')
       .update({ sync_status: 'syncing' })
       .eq('username', username)
-      .eq('user_id', options.userId);
+      .eq('user_id', syncOptions.userId!);
 
     // Always start without cursor to get newest posts first
     let currentCursor: string | undefined = undefined;
@@ -86,7 +87,7 @@ export async function syncCreator(
           .from('creators')
           .select('sync_status')
           .eq('username', username)
-          .eq('user_id', options.userId)
+          .eq('user_id', syncOptions.userId!)
           .maybeSingle();
 
         if (statusCheck?.sync_status !== 'syncing' && statusCheck?.sync_status !== 'pending') {
@@ -273,7 +274,7 @@ export async function syncCreator(
               .from('creators')
               .update({ last_cursor: cursorValue })
               .eq('username', username)
-              .eq('user_id', options.userId);
+              .eq('user_id', syncOptions.userId!);
             console.log(`💾 Saved cursor to database`);
           } else {
             console.log(`⚠️  Could not extract cursor from nextPage`);
@@ -293,7 +294,7 @@ export async function syncCreator(
           .from('creators')
           .update({ total_posts: currentPostCount || 0 })
           .eq('username', username)
-          .eq('user_id', options.userId);
+          .eq('user_id', syncOptions.userId!);
 
         if (onProgress) {
           onProgress({
@@ -352,7 +353,7 @@ export async function syncCreator(
         updated_at: new Date().toISOString()
       })
       .eq('username', username)
-      .eq('user_id', options.userId);
+      .eq('user_id', syncOptions.userId!);
 
     console.log(`✅ Sync completed for ${username}: ${actualPostCount} unique posts, ${totalImages} images fetched`);
 

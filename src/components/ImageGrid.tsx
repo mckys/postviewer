@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react';
-import { supabase, ImageData } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+
+interface ImageData {
+  id: number;
+  url: string;
+  post_id: number;
+  image_url: string;
+  extracted_at: string;
+  posts?: {
+    post_url: string;
+  };
+}
 
 export const ImageGrid = () => {
   const [images, setImages] = useState<ImageData[]>([]);

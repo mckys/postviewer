@@ -15,10 +15,9 @@ interface Post {
 interface HiddenPostsProps {
   onPostClick?: (postId: number) => void;
   onCreatorClick?: (username: string) => void;
-  onBack?: () => void;
 }
 
-export function HiddenPosts({ onPostClick, onCreatorClick, onBack }: HiddenPostsProps) {
+export function HiddenPosts({ onPostClick, onCreatorClick }: HiddenPostsProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
 

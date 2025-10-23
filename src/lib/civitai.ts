@@ -187,7 +187,7 @@ export async function fetchAllImagesByUsername(
         await sleep(3000);
       }
 
-      const response = await fetchImagesByUsername(username, 200, currentPage);
+      const response = await fetchImagesByUsername(username, 200, String(currentPage));
       allImages.push(...response.items);
 
       // Reset retry count on success
