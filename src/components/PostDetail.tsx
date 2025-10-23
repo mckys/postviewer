@@ -20,6 +20,7 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
   const [postTitle, setPostTitle] = useState<string>('');
   const [creatorName, setCreatorName] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [lastSyncDate, setLastSyncDate] = useState<string>('');
 
   // Notify parent of image count changes
   useEffect(() => {
@@ -193,6 +194,22 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
       }
       if (post?.creator_username) {
         setCreatorName(post.creator_username);
+      }
+
+      // Format last sync date
+      if (post?.updated_at) {
+        const date = new Date(post.updated_at);
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        if (date.toDateString() === today.toDateString()) {
+          setLastSyncDate('Today');
+        } else if (date.toDateString() === yesterday.toDateString()) {
+          setLastSyncDate('Yesterday');
+        } else {
+          setLastSyncDate(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+        }
       }
 
       // Get current images from database
@@ -789,7 +806,7 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
 
         {/* Post info bar */}
         <div className="flex items-center gap-6 py-3 rounded-lg flex-wrap sm:flex-nowrap">
-          {/* Image count pill and Post ID */}
+          {/* Image count pill and last sync */}
           <div className="flex items-center gap-3">
             <div className="bg-gray-900 text-white px-4 py-2 rounded-full flex items-center">
               <span className="text-sm font-semibold tracking-tight leading-none">
@@ -797,10 +814,12 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
               </span>
             </div>
 
-            {/* Post ID */}
-            <div className="hidden sm:flex items-center">
-              <span className="text-base font-normal text-gray-900 tracking-tight">Post #{postId}</span>
-            </div>
+            {/* Last sync date */}
+            {lastSyncDate && (
+              <div className="hidden sm:flex items-center">
+                <span className="text-base font-normal text-gray-900 tracking-tight">Last synced: {lastSyncDate}</span>
+              </div>
+            )}
           </div>
 
           {/* Divider */}
