@@ -1,0 +1,22 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Black background -->
+  <rect width="512" height="512" fill="#000000"/>
+
+  <!-- Red frame/viewfinder icon -->
+  <g fill="none" stroke="#DC2626" stroke-width="24">
+    <!-- Outer frame -->
+    <rect x="96" y="96" width="320" height="320" rx="16"/>
+
+    <!-- Inner frame -->
+    <rect x="144" y="144" width="224" height="224" rx="8"/>
+
+    <!-- Corner brackets -->
+    <path d="M 96 176 L 96 96 L 176 96"/>
+    <path d="M 336 96 L 416 96 L 416 176"/>
+    <path d="M 416 336 L 416 416 L 336 416"/>
+    <path d="M 176 416 L 96 416 L 96 336"/>
+  </g>
+
+  <!-- Center dot -->
+  <circle cx="256" cy="256" r="16" fill="#DC2626"/>
+</svg>

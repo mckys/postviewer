@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { CivitaiImage } from '../lib/civitai';
 import { Pencil, PencilOff, RefreshCw, ExternalLink, Download, Play, Settings, Info } from 'lucide-react';
 import JSZip from 'jszip';
+import { useSwipeable } from 'react-swipeable';
 
 interface PostDetailProps {
   postId: number;
@@ -750,6 +751,25 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
 
   console.log(`🎨 Rendering PostDetail - prevPostId: ${prevPostId}, nextPostId: ${nextPostId}, showing nav: ${!!(prevPostId || nextPostId)}`);
 
+  // Swipe handlers for post navigation
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (nextPostId && onNavigatePost) {
+        console.log(`👈 Swiped left - navigating to next post: ${nextPostId}`);
+        onNavigatePost(nextPostId);
+      }
+    },
+    onSwipedRight: () => {
+      if (prevPostId && onNavigatePost) {
+        console.log(`👉 Swiped right - navigating to prev post: ${prevPostId}`);
+        onNavigatePost(prevPostId);
+      }
+    },
+    trackMouse: false,
+    preventScrollOnSwipe: false,
+    delta: 50, // minimum swipe distance
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -791,7 +811,7 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div {...swipeHandlers} className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-6">
         {/* Username */}

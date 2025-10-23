@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { CivitaiImage } from '../lib/civitai';
 import { Play, Square, Settings, Plus, Minus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useSwipeable } from 'react-swipeable';
 
 interface SlideshowProps {
   images: CivitaiImage[];
@@ -347,8 +348,28 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   const isVideo = (url: string) => url.toLowerCase().endsWith('.mp4') || url.toLowerCase().includes('.mp4?');
   const isCurrentVideo = isVideo(displayImage.url);
 
+  // Swipe handlers for image navigation
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (!isZoomed) {
+        console.log(`👈 Swiped left - going to next image`);
+        goToNext();
+      }
+    },
+    onSwipedRight: () => {
+      if (!isZoomed) {
+        console.log(`👉 Swiped right - going to previous image`);
+        goToPrevious();
+      }
+    },
+    trackMouse: false,
+    preventScrollOnSwipe: true,
+    delta: 50, // minimum swipe distance
+  });
+
   return (
     <div
+      {...swipeHandlers}
       className="fixed inset-0 bg-black z-50 flex items-center justify-center overflow-hidden"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
