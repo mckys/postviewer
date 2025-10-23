@@ -2,7 +2,6 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react
 import { Navigation } from './components/Navigation';
 import { Feed } from './components/Feed';
 import { Settings } from './components/Settings';
-import { MyPosts } from './components/MyPosts';
 import { Favorites } from './components/Favorites';
 import { PostDetail } from './components/PostDetail';
 import { Slideshow } from './components/Slideshow';
@@ -32,6 +31,21 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [updatedPostImageCount, setUpdatedPostImageCount] = useState<{ postId: number; imageCount: number } | null>(null);
   const [shouldRemount, setShouldRemount] = useState(true);
+  const [myUsername, setMyUsername] = useState<string | null>(null);
+
+  // Fetch user's username from settings
+  useEffect(() => {
+    if (user) {
+      supabase
+        .from('user_settings')
+        .select('civitai_username')
+        .eq('user_id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          setMyUsername(data?.civitai_username || null);
+        });
+    }
+  }, [user]);
 
   // Check for existing auth session
   useEffect(() => {
@@ -700,11 +714,14 @@ function App() {
         />
       </div>
       <div style={{ display: currentView === 'myposts' ? 'block' : 'none' }} key={shouldRemount && currentView === 'myposts' ? `myposts-${refreshTrigger}` : 'myposts-persistent'}>
-        <MyPosts
-          onPostClick={handlePostClick}
-          refreshTrigger={refreshTrigger}
-          updatedPostImageCount={updatedPostImageCount}
-        />
+        {myUsername && (
+          <CreatorFeed
+            username={myUsername}
+            onPostClick={handlePostClick}
+            refreshTrigger={refreshTrigger}
+            updatedPostImageCount={updatedPostImageCount}
+          />
+        )}
       </div>
       <div style={{ display: currentView === 'favorites' ? 'block' : 'none' }} key={shouldRemount && currentView === 'favorites' ? `favorites-${refreshTrigger}` : 'favorites-persistent'}>
         <Favorites
