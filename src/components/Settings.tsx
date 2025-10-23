@@ -611,41 +611,41 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Dashboard */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+      <div className="bg-gray-900 rounded-lg shadow-md p-6 mb-8">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {/* Total Creators */}
           <div className="flex items-center gap-3 sm:gap-4">
-            <Users className="w-12 h-12 sm:w-16 sm:h-16 text-red-600" strokeWidth={0.5} />
+            <Users className="w-12 h-12 sm:w-16 sm:h-16 text-red-500" strokeWidth={0.5} />
             <div>
-              <p className="text-xs sm:text-sm text-gray-500">Creators</p>
-              <p className="text-2xl sm:text-3xl font-semibold text-gray-900">{creators.length}</p>
+              <p className="text-xs sm:text-sm text-gray-400">Creators</p>
+              <p className="text-2xl sm:text-3xl font-semibold text-white">{creators.length}</p>
             </div>
           </div>
 
           {/* Total Posts */}
           <div className="flex items-center gap-3 sm:gap-4">
-            <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-red-600" strokeWidth={0.5} />
+            <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-red-500" strokeWidth={0.5} />
             <div>
-              <p className="text-xs sm:text-sm text-gray-500">Posts</p>
-              <p className="text-2xl sm:text-3xl font-semibold text-gray-900">{totalPosts.toLocaleString()}</p>
+              <p className="text-xs sm:text-sm text-gray-400">Posts</p>
+              <p className="text-2xl sm:text-3xl font-semibold text-white">{totalPosts.toLocaleString()}</p>
             </div>
           </div>
 
           {/* Total Images */}
           <div className="flex items-center gap-3 sm:gap-4">
-            <ImageIcon className="w-12 h-12 sm:w-16 sm:h-16 text-red-600" strokeWidth={0.5} />
+            <ImageIcon className="w-12 h-12 sm:w-16 sm:h-16 text-red-500" strokeWidth={0.5} />
             <div>
-              <p className="text-xs sm:text-sm text-gray-500">Images</p>
-              <p className="text-2xl sm:text-3xl font-semibold text-gray-900">{totalImages.toLocaleString()}</p>
+              <p className="text-xs sm:text-sm text-gray-400">Images</p>
+              <p className="text-2xl sm:text-3xl font-semibold text-white">{totalImages.toLocaleString()}</p>
             </div>
           </div>
 
           {/* Favorites */}
           <div className="flex items-center gap-3 sm:gap-4">
-            <Heart className="w-12 h-12 sm:w-16 sm:h-16 text-red-600" strokeWidth={0.5} />
+            <Heart className="w-12 h-12 sm:w-16 sm:h-16 text-red-500" strokeWidth={0.5} />
             <div>
-              <p className="text-xs sm:text-sm text-gray-500">Favorites</p>
-              <p className="text-2xl sm:text-3xl font-semibold text-gray-900">{favoritesCount}</p>
+              <p className="text-xs sm:text-sm text-gray-400">Favorites</p>
+              <p className="text-2xl sm:text-3xl font-semibold text-white">{favoritesCount}</p>
             </div>
           </div>
         </div>
@@ -902,13 +902,13 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
           <div className="flex items-center justify-end">
             <button
               onClick={handleToggleNSFW}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              className={`relative inline-flex h-[26px] w-[58px] items-center p-1 rounded transition-colors ${
                 showNSFW ? 'bg-red-600' : 'bg-gray-300'
               }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  showNSFW ? 'translate-x-6' : 'translate-x-1'
+                className={`h-[18px] w-[24px] rounded bg-white transition-transform ${
+                  showNSFW ? 'translate-x-[26px]' : 'translate-x-0'
                 }`}
               />
             </button>
@@ -922,7 +922,7 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
           <div className="flex items-center justify-end">
             <button
               onClick={onViewHidden}
-              className="px-4 py-1 bg-gray-900 text-white text-sm rounded hover:bg-gray-800 transition-colors"
+              className="w-[58px] h-[26px] bg-gray-900 text-white text-sm rounded hover:bg-gray-800 transition-colors"
             >
               View
             </button>
