@@ -10,7 +10,8 @@ createRoot(document.getElementById('root')!).render(
 )
 
 // Register service worker for PWA functionality
-if ('serviceWorker' in navigator) {
+const ENABLE_SERVICE_WORKER = false; // Temporary flag to disable for testing
+if (ENABLE_SERVICE_WORKER && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then((registration) => {

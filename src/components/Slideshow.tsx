@@ -265,7 +265,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (isZoomed) {
+    if (isZoomed && actualDimensions) {
       e.preventDefault();
       setIsDragging(true);
       // Store where we started dragging, accounting for current pan position
@@ -274,10 +274,10 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   };
 
   const constrainPan = (screenX: number, screenY: number) => {
-    if (!imageRef.current || !actualDimensions) return { x: screenX, y: screenY };
+    if (!imageRef.current || !actualDimensions) return { x: 0, y: 0 };
 
     const container = imageRef.current.parentElement;
-    if (!container) return { x: screenX, y: screenY };
+    if (!container) return { x: 0, y: 0 };
 
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
@@ -301,7 +301,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
       contentWidth = containerHeight * naturalAspect;
     }
 
-    // Zoom scale constant
+    // Zoom scale constant (must match the transform scale)
     const zoomScale = 3;
 
     // After zooming, the content dimensions are:
@@ -309,13 +309,14 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
     const zoomedHeight = contentHeight * zoomScale;
 
     // How much the zoomed image extends beyond the container on each side
-    const excessWidth = zoomedWidth - containerWidth;
-    const excessHeight = zoomedHeight - containerHeight;
+    const excessWidth = Math.max(0, zoomedWidth - containerWidth);
+    const excessHeight = Math.max(0, zoomedHeight - containerHeight);
 
-    // Maximum pan distance in screen pixels
-    const maxPanX = excessWidth > 0 ? excessWidth / 2 : 0;
-    const maxPanY = excessHeight > 0 ? excessHeight / 2 : 0;
+    // Maximum pan distance in screen pixels (half the excess on each side)
+    const maxPanX = excessWidth / 2;
+    const maxPanY = excessHeight / 2;
 
+    // Clamp the values strictly within bounds
     return {
       x: Math.max(-maxPanX, Math.min(maxPanX, screenX)),
       y: Math.max(-maxPanY, Math.min(maxPanY, screenY))
@@ -332,7 +333,12 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   };
 
   const handleMouseUp = () => {
-    setIsDragging(false);
+    if (isDragging) {
+      setIsDragging(false);
+      // Apply constraints one final time when releasing to ensure image is in bounds
+      const constrained = constrainPan(panPosition.x, panPosition.y);
+      setPanPosition(constrained);
+    }
   };
 
   // Safety check: if indices are out of bounds, use first image as fallback
@@ -349,21 +355,22 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   const isCurrentVideo = isVideo(displayImage.url);
 
   // Swipe handlers for image navigation
+  const ENABLE_SWIPE = false; // Temporary flag to disable swipe for testing
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
-      if (!isZoomed) {
+      if (ENABLE_SWIPE && !isZoomed) {
         console.log(`👈 Swiped left - going to next image`);
         goToNext();
       }
     },
     onSwipedRight: () => {
-      if (!isZoomed) {
+      if (ENABLE_SWIPE && !isZoomed) {
         console.log(`👉 Swiped right - going to previous image`);
         goToPrevious();
       }
     },
     trackMouse: false,
-    preventScrollOnSwipe: true,
+    preventScrollOnSwipe: ENABLE_SWIPE,
     delta: 50, // minimum swipe distance
   });
 

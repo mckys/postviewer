@@ -752,15 +752,16 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
   console.log(`🎨 Rendering PostDetail - prevPostId: ${prevPostId}, nextPostId: ${nextPostId}, showing nav: ${!!(prevPostId || nextPostId)}`);
 
   // Swipe handlers for post navigation
+  const ENABLE_SWIPE = false; // Temporary flag to disable swipe for testing
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
-      if (nextPostId && onNavigatePost) {
+      if (ENABLE_SWIPE && nextPostId && onNavigatePost) {
         console.log(`👈 Swiped left - navigating to next post: ${nextPostId}`);
         onNavigatePost(nextPostId);
       }
     },
     onSwipedRight: () => {
-      if (prevPostId && onNavigatePost) {
+      if (ENABLE_SWIPE && prevPostId && onNavigatePost) {
         console.log(`👉 Swiped right - navigating to prev post: ${prevPostId}`);
         onNavigatePost(prevPostId);
       }
