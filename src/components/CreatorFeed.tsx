@@ -48,7 +48,7 @@ const PostCard = ({ post, onPostClick, onToggleFavorite, onToggleHide }: PostCar
     >
       <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow relative">
         {/* Image count chip */}
-        <div className={`absolute top-3 left-3 text-xs font-medium px-3 py-1 rounded-full z-10 ${
+        <div className={`absolute top-3 left-3 text-xs font-medium px-3 py-1 rounded-full z-20 ${
           post.imageCount > 15
             ? 'bg-red-600 text-white'
             : post.imageCount > 5
