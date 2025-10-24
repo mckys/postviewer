@@ -190,9 +190,12 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
   const [posts, setPosts] = useState<PostPreview[]>([]);
   const [displayedPosts, setDisplayedPosts] = useState<PostPreview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
 
   // Update post image count when returning from post detail
   useEffect(() => {
@@ -238,13 +241,16 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
       if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500) {
         if (page * POSTS_PER_PAGE < posts.length) {
           setPage(prev => prev + 1);
+        } else if (hasMore && !loadingMore) {
+          // Load more from database when we've displayed all fetched posts
+          loadMorePosts();
         }
       }
     };
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [page, posts.length]);
+  }, [page, posts.length, hasMore, loadingMore]);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -354,10 +360,114 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
 
       console.log('✅ Setting posts:', visiblePosts.length);
       setPosts(visiblePosts);
+      setOffset(50); // Set offset for next fetch
+      setHasMore(visiblePosts.length === 50); // If we got fewer than 50, no more to load
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadMorePosts() {
+    if (loadingMore || !hasMore) return;
+
+    try {
+      setLoadingMore(true);
+      console.log(`📥 Loading more posts from offset ${offset}...`);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get my username to exclude from feed
+      const { data: userSettings } = await supabase
+        .from('user_settings')
+        .select('civitai_username')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const myUsername = userSettings?.civitai_username;
+
+      // Get my creators
+      const { data: myCreators } = await supabase
+        .from('creators')
+        .select('username')
+        .eq('user_id', user.id);
+
+      const creatorUsernames = myCreators?.map(c => c.username) || [];
+
+      if (creatorUsernames.length === 0) {
+        setHasMore(false);
+        return;
+      }
+
+      // Get user's NSFW preference
+      const showNSFW = await getUserNSFWPreference();
+
+      // Get more posts
+      let query = supabase
+        .from('posts')
+        .select('post_id, creator_username, cover_image_url, published_at, image_count, nsfw')
+        .not('cover_image_url', 'is', null)
+        .in('creator_username', creatorUsernames);
+
+      if (!showNSFW) {
+        query = query.eq('nsfw', false);
+      }
+
+      query = query
+        .order('post_id', { ascending: false })
+        .range(offset, offset + 49); // Fetch next 50 posts
+
+      if (myUsername) {
+        query = query.neq('creator_username', myUsername);
+      }
+
+      const { data: postsData, error: postsError } = await query;
+
+      if (postsError) throw postsError;
+
+      console.log(`📥 Loaded ${postsData?.length || 0} more posts`);
+
+      if (!postsData || postsData.length === 0) {
+        setHasMore(false);
+        return;
+      }
+
+      // Get post interactions
+      const { data: interactions } = await supabase
+        .from('post_interactions')
+        .select('*')
+        .eq('user_id', user.id);
+
+      const interactionsMap = new Map(
+        interactions?.map(i => [i.post_id, { isHidden: i.is_hidden, isFavorited: i.is_favorited }]) || []
+      );
+
+      // Map new posts
+      const newPosts = postsData.map((post) => {
+        const interaction = interactionsMap.get(post.post_id);
+        return {
+          postId: post.post_id,
+          coverImageUrl: post.cover_image_url,
+          imageCount: post.image_count || 0,
+          username: post.creator_username,
+          isHidden: interaction?.isHidden || false,
+          isFavorited: interaction?.isFavorited || false
+        };
+      });
+
+      // Filter out hidden posts
+      const visibleNewPosts = newPosts.filter(p => !p.isHidden);
+
+      // Append to existing posts
+      setPosts(prev => [...prev, ...visibleNewPosts]);
+      setOffset(prev => prev + 50);
+      setHasMore(postsData.length === 50); // If we got fewer than 50, no more to load
+    } catch (err) {
+      console.error('Error loading more posts:', err);
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -490,6 +600,12 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
         Showing {displayedPosts.length} of {posts.length} {posts.length === 1 ? 'post' : 'posts'}
         {displayedPosts.length < posts.length && (
           <div className="mt-4 text-sm text-gray-500">Scroll down to load more...</div>
+        )}
+        {loadingMore && (
+          <div className="mt-4 text-sm text-gray-500">Loading more posts...</div>
+        )}
+        {!hasMore && posts.length > 0 && (
+          <div className="mt-4 text-sm text-gray-500">All posts loaded</div>
         )}
       </div>
 
