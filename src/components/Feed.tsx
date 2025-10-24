@@ -319,7 +319,16 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
       }
 
       const { count } = await countQuery;
-      setTotalCount(count || 0);
+
+      // Get count of hidden posts to subtract from total
+      const { data: hiddenPosts } = await supabase
+        .from('post_interactions')
+        .select('post_id')
+        .eq('user_id', user.id)
+        .eq('is_hidden', true);
+
+      const hiddenCount = hiddenPosts?.length || 0;
+      setTotalCount((count || 0) - hiddenCount);
 
       // Get posts only from my creators
       let query = supabase
