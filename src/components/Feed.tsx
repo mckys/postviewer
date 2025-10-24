@@ -223,7 +223,10 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
   const POSTS_PER_PAGE = 50;
 
   useEffect(() => {
-    fetchFeed();
+    // Only fetch if we don't have posts yet
+    if (posts.length === 0) {
+      fetchFeed();
+    }
   }, []);
 
   // Refresh when trigger changes
