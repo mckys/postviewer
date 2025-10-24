@@ -202,6 +202,7 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
 
   // Update post image count when returning from post detail
   useEffect(() => {
@@ -301,6 +302,24 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
       // Get user's NSFW preference
       const showNSFW = await getUserNSFWPreference();
       console.log(`🔞 User NSFW preference: ${showNSFW ? 'Show' : 'Hide'}`);
+
+      // First, get the total count of posts matching our filters
+      let countQuery = supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .not('cover_image_url', 'is', null)
+        .in('creator_username', creatorUsernames);
+
+      if (!showNSFW) {
+        countQuery = countQuery.eq('nsfw', false);
+      }
+
+      if (myUsername) {
+        countQuery = countQuery.neq('creator_username', myUsername);
+      }
+
+      const { count } = await countQuery;
+      setTotalCount(count || 0);
 
       // Get posts only from my creators
       let query = supabase
@@ -607,8 +626,8 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
         ))}
       </Masonry>
       <div className="mt-8 text-center text-gray-600">
-        Showing {displayedPosts.length} of {posts.length} {posts.length === 1 ? 'post' : 'posts'}
-        {displayedPosts.length < posts.length && (
+        Showing {displayedPosts.length} of {totalCount !== null ? totalCount : posts.length} {(totalCount !== null ? totalCount : posts.length) === 1 ? 'post' : 'posts'}
+        {hasMore && (
           <div className="mt-4 text-sm text-gray-500">Scroll down to load more...</div>
         )}
         {loadingMore && (
