@@ -611,11 +611,7 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Dashboard */}
-      <div className="bg-gray-900 rounded-lg shadow-md p-6 mb-8 relative">
-        {/* Version number */}
-        <div className="absolute top-2 right-3 text-xs text-gray-500">
-          v{import.meta.env.VITE_APP_VERSION || '0.1.0'}
-        </div>
+      <div className="bg-gray-900 rounded-lg shadow-md p-6 mb-2">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {/* Total Creators */}
           <div className="flex items-center gap-3 sm:gap-4">
@@ -653,6 +649,11 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Version number */}
+      <div className="text-center text-xs text-black mb-6">
+        v{import.meta.env.VITE_APP_VERSION || '0.2.0'}
       </div>
 
       {/* Creators List */}
