@@ -64,7 +64,7 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
         {/* Image or Video */}
         <div
           className="cursor-pointer relative bg-gray-100"
-          style={post.coverWidth && post.coverHeight ? { aspectRatio: `${post.coverWidth} / ${post.coverHeight}` } : { minHeight: '300px' }}
+          style={post.coverWidth && post.coverHeight ? { aspectRatio: `${post.coverWidth} / ${post.coverHeight}` } : undefined}
           onClick={() => onPostClick?.(post.postId)}
         >
           {/* Loading skeleton */}
@@ -77,6 +77,7 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
               <video
                 src={post.coverImageUrl}
                 className="w-full h-auto relative z-10"
+                style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
                 autoPlay
                 muted
                 loop
@@ -89,6 +90,7 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
                 src={post.coverImageUrl}
                 alt={`Post ${post.postId} by ${post.username}`}
                 className="w-full h-auto relative z-10"
+                style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
                 onLoad={() => setImageLoaded(true)}
                 loading="lazy"
               />
