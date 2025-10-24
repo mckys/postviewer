@@ -667,11 +667,8 @@ function App() {
     // Scroll to top when changing nav views
     window.scrollTo(0, 0);
 
-    // Trigger remount and refresh when navigating via top nav
-    setShouldRemount(true);
-    if (view === 'feed' || view === 'myposts' || view === 'favorites') {
-      setRefreshTrigger(prev => prev + 1);
-    }
+    // Don't remount when switching between tabs - only remount when clicking same tab
+    setShouldRemount(false);
   };
 
   // Show loading spinner while checking auth
