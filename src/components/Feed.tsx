@@ -320,15 +320,36 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
 
       const { count } = await countQuery;
 
-      // Get count of hidden posts to subtract from total
+      // Get count of hidden posts that would appear in this feed
+      // (same filters as the main query)
       const { data: hiddenPosts } = await supabase
         .from('post_interactions')
         .select('post_id')
         .eq('user_id', user.id)
         .eq('is_hidden', true);
 
-      const hiddenCount = hiddenPosts?.length || 0;
-      setTotalCount((count || 0) - hiddenCount);
+      if (!hiddenPosts || hiddenPosts.length === 0) {
+        setTotalCount(count || 0);
+      } else {
+        // Count how many of these hidden posts would have been in the feed
+        let hiddenCountQuery = supabase
+          .from('posts')
+          .select('*', { count: 'exact', head: true })
+          .in('post_id', hiddenPosts.map(p => p.post_id))
+          .not('cover_image_url', 'is', null)
+          .in('creator_username', creatorUsernames);
+
+        if (!showNSFW) {
+          hiddenCountQuery = hiddenCountQuery.eq('nsfw', false);
+        }
+
+        if (myUsername) {
+          hiddenCountQuery = hiddenCountQuery.neq('creator_username', myUsername);
+        }
+
+        const { count: hiddenInFeedCount } = await hiddenCountQuery;
+        setTotalCount((count || 0) - (hiddenInFeedCount || 0));
+      }
 
       // Get posts only from my creators
       let query = supabase
