@@ -369,7 +369,7 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
       console.log('✅ Setting posts:', visiblePosts.length);
       setPosts(visiblePosts);
       setOffset(50); // Set offset for next fetch
-      setHasMore(visiblePosts.length === 50); // If we got fewer than 50, no more to load
+      setHasMore(postsData.length === 50); // If we got fewer than 50 from DB, no more to load
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
