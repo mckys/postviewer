@@ -165,6 +165,8 @@ export async function syncCreator(
               creator_username: username,
               cover_image_url: firstImage.url,
               cover_image_hash: firstImage.hash,
+              cover_width: firstImage.width,
+              cover_height: firstImage.height,
               image_count: images.length,
               nsfw: firstImage.nsfw,
               published_at: firstImage.createdAt || null,

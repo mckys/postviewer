@@ -9,6 +9,8 @@ interface PostPreview {
   username: string;
   isHidden: boolean;
   isFavorited: boolean;
+  coverWidth?: number;
+  coverHeight?: number;
 }
 
 interface FavoritesProps {
@@ -59,12 +61,12 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
         {/* Image or Video */}
         <div
           className="cursor-pointer relative bg-gray-100"
-          style={{ minHeight: '300px' }}
+          style={post.coverWidth && post.coverHeight ? { aspectRatio: `${post.coverWidth} / ${post.coverHeight}` } : { minHeight: '300px' }}
           onClick={() => onPostClick?.(post.postId)}
         >
           {/* Loading skeleton */}
           {!imageLoaded && (
-            <div className="absolute inset-0 bg-gray-200 animate-pulse" style={{ minHeight: '300px' }} />
+            <div className="absolute inset-0 bg-gray-200 animate-pulse" />
           )}
 
           {post.coverImageUrl ? (
@@ -248,7 +250,7 @@ export const Favorites = ({ onPostClick, onCreatorClick, refreshTrigger, updated
       // Get posts data for favorited posts
       let query = supabase
         .from('posts')
-        .select('post_id, creator_username, cover_image_url, published_at, image_count, nsfw')
+        .select('post_id, creator_username, cover_image_url, cover_width, cover_height, published_at, image_count, nsfw')
         .in('post_id', favoritedPostIds)
         .not('cover_image_url', 'is', null);
 
@@ -298,6 +300,8 @@ export const Favorites = ({ onPostClick, onCreatorClick, refreshTrigger, updated
         return {
           postId: post.post_id,
           coverImageUrl: post.cover_image_url,
+          coverWidth: post.cover_width,
+          coverHeight: post.cover_height,
           imageCount: post.image_count || 0,
           username: post.creator_username,
           isHidden: interaction?.isHidden || false,
