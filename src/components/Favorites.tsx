@@ -59,11 +59,12 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
         {/* Image or Video */}
         <div
           className="cursor-pointer relative bg-gray-100"
+          style={{ minHeight: '300px' }}
           onClick={() => onPostClick?.(post.postId)}
         >
           {/* Loading skeleton */}
           {!imageLoaded && (
-            <div className="absolute inset-0 bg-gray-200 animate-pulse" />
+            <div className="absolute inset-0 bg-gray-200 animate-pulse" style={{ minHeight: '300px' }} />
           )}
 
           {post.coverImageUrl ? (
@@ -76,6 +77,7 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
                 loop
                 playsInline
                 onError={handleVideoError}
+                onLoadedMetadata={() => setImageLoaded(true)}
               />
             ) : (
               <img
