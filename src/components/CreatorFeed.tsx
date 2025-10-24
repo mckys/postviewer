@@ -58,14 +58,19 @@ const PostCard = ({ post, onPostClick, onToggleFavorite, onToggleHide }: PostCar
 
         {/* Image or Video */}
         <div
-          className="cursor-pointer"
+          className="cursor-pointer relative bg-gray-100"
           onClick={() => onPostClick?.(post.postId)}
         >
+          {/* Loading skeleton */}
+          {!imageLoaded && (
+            <div className="absolute inset-0 bg-gray-200 animate-pulse" />
+          )}
+
           {post.coverImageUrl ? (
             mediaType === 'video' ? (
               <video
                 src={post.coverImageUrl}
-                className="w-full h-auto"
+                className="w-full h-auto relative z-10"
                 autoPlay
                 muted
                 loop
@@ -76,10 +81,9 @@ const PostCard = ({ post, onPostClick, onToggleFavorite, onToggleHide }: PostCar
               <img
                 src={post.coverImageUrl}
                 alt={`Post ${post.postId}`}
-                className={`w-full h-auto transition-opacity duration-300 ${
-                  imageLoaded ? 'opacity-100' : 'opacity-0'
-                }`}
+                className="w-full h-auto relative z-10"
                 onLoad={() => setImageLoaded(true)}
+                loading="lazy"
               />
             )
           ) : (

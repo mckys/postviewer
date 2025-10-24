@@ -303,7 +303,9 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
         console.log(`🚫 Filtering out NSFW posts`);
       }
 
-      query = query.order('post_id', { ascending: false }); // Sort by post_id (higher = newer)
+      query = query
+        .order('post_id', { ascending: false }) // Sort by post_id (higher = newer)
+        .limit(50); // Start with 50 posts, load more on scroll
 
       // Exclude my posts if username is set
       if (myUsername) {
