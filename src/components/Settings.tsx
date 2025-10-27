@@ -979,7 +979,12 @@ export const Settings = ({ onCreatorClick, onViewHidden, onViewUnclaimed, onNSFW
           <div className="flex items-center justify-end">
             <button
               onClick={onViewUnclaimed}
-              className="w-[58px] h-[26px] bg-gray-900 text-white text-sm rounded hover:bg-gray-800 transition-colors"
+              disabled={myUsername === 'mckys'}
+              className={`w-[58px] h-[26px] text-white text-sm rounded transition-colors ${
+                myUsername === 'mckys'
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-gray-900 hover:bg-gray-800'
+              }`}
             >
               View
             </button>

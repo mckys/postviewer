@@ -19,7 +19,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   const [displayIndex, setDisplayIndex] = useState(startIndex);
   const [actualDimensions, setActualDimensions] = useState<{ width: number; height: number } | null>(null);
   const [showInfo, setShowInfo] = useState(false);
-  const [isZoomed, setIsZoomed] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
   const [tapTimeout, setTapTimeout] = useState<NodeJS.Timeout | null>(null);
   const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -28,6 +28,15 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Zoom constants
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 4;
+  const DOUBLE_TAP_ZOOM = 3;
+
+  // Pinch gesture state
+  const [initialPinchDistance, setInitialPinchDistance] = useState<number | null>(null);
+  const [initialPinchScale, setInitialPinchScale] = useState(1);
 
   const [playInterval, setPlayInterval] = useState(3000); // Default 3 seconds
   const [showUI, setShowUI] = useState(true);
@@ -88,7 +97,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
     setCurrentIndex(startIndex);
     setDisplayIndex(startIndex);
     setActualDimensions(null);
-    setIsZoomed(false);
+    setZoomScale(1);
     setPanPosition({ x: 0, y: 0 });
   }, [images, startIndex]);
 
@@ -154,7 +163,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
     setDisplayIndex(nextIndex);
     setActualDimensions(null); // Reset dimensions for new image
     setShowInfo(false); // Hide info when changing images
-    setIsZoomed(false); // Reset zoom when changing images
+    setZoomScale(1); // Reset zoom when changing images
     setPanPosition({ x: 0, y: 0 }); // Reset pan position
 
     // Start transition
@@ -193,7 +202,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
     setDisplayIndex(prevIndex);
     setActualDimensions(null); // Reset dimensions for new image
     setShowInfo(false); // Hide info when changing images
-    setIsZoomed(false); // Reset zoom when changing images
+    setZoomScale(1); // Reset zoom when changing images
     setPanPosition({ x: 0, y: 0 }); // Reset pan position
 
     // Start transition
@@ -239,23 +248,25 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
     }
 
     // If zoomed and dragging, don't process taps
-    if (isZoomed && isDragging) {
+    if (zoomScale > 1 && isDragging) {
       return;
     }
 
     if (tapTimeout) {
-      // Double tap detected - only works when not playing
+      // Double tap detected - toggle zoom
       clearTimeout(tapTimeout);
       setTapTimeout(null);
-      setIsZoomed(!isZoomed);
-      if (isZoomed) {
+      if (zoomScale > 1) {
+        setZoomScale(1);
         setPanPosition({ x: 0, y: 0 }); // Reset pan when zooming out
+      } else {
+        setZoomScale(DOUBLE_TAP_ZOOM);
       }
     } else {
       // Single tap - wait to see if there's a second tap
       const timeout = setTimeout(() => {
         // Single tap confirmed - only advance if not zoomed and not playing
-        if (!isZoomed && !isPlaying) {
+        if (zoomScale === 1 && !isPlaying) {
           goToNext();
         }
         setTapTimeout(null);
@@ -265,7 +276,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (isZoomed && actualDimensions) {
+    if (zoomScale > 1 && actualDimensions) {
       e.preventDefault();
       setIsDragging(true);
       // Store where we started dragging, accounting for current pan position
@@ -301,9 +312,6 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
       contentWidth = containerHeight * naturalAspect;
     }
 
-    // Zoom scale constant (must match the transform scale)
-    const zoomScale = 3;
-
     // After zooming, the content dimensions are:
     const zoomedWidth = contentWidth * zoomScale;
     const zoomedHeight = contentHeight * zoomScale;
@@ -324,7 +332,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isZoomed && isDragging) {
+    if (zoomScale > 1 && isDragging) {
       const newX = e.clientX - dragStart.x;
       const newY = e.clientY - dragStart.y;
       const constrained = constrainPan(newX, newY);
@@ -358,13 +366,13 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   const ENABLE_SWIPE = false; // Temporary flag to disable swipe for testing
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
-      if (ENABLE_SWIPE && !isZoomed) {
+      if (ENABLE_SWIPE && zoomScale === 1) {
         console.log(`👈 Swiped left - going to next image`);
         goToNext();
       }
     },
     onSwipedRight: () => {
-      if (ENABLE_SWIPE && !isZoomed) {
+      if (ENABLE_SWIPE && zoomScale === 1) {
         console.log(`👉 Swiped right - going to previous image`);
         goToPrevious();
       }
@@ -374,6 +382,58 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
     delta: 50, // minimum swipe distance
   });
 
+  // Pinch-to-zoom gesture handlers
+  const getTouchDistance = (touches: TouchList): number => {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      // Pinch started
+      const distance = getTouchDistance(e.touches);
+      setInitialPinchDistance(distance);
+      setInitialPinchScale(zoomScale);
+    } else if (e.touches.length === 1 && zoomScale > 1) {
+      // Single touch drag when zoomed
+      const touch = e.touches[0];
+      setIsDragging(true);
+      setDragStart({ x: touch.clientX - panPosition.x, y: touch.clientY - panPosition.y });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && initialPinchDistance) {
+      // Pinch zooming
+      e.preventDefault();
+      const currentDistance = getTouchDistance(e.touches);
+      const scaleChange = currentDistance / initialPinchDistance;
+      const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, initialPinchScale * scaleChange));
+      setZoomScale(newScale);
+    } else if (e.touches.length === 1 && zoomScale > 1 && isDragging) {
+      // Touch dragging when zoomed
+      e.preventDefault();
+      const touch = e.touches[0];
+      const newX = touch.clientX - dragStart.x;
+      const newY = touch.clientY - dragStart.y;
+      const constrained = constrainPan(newX, newY);
+      setPanPosition(constrained);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      setInitialPinchDistance(null);
+    }
+    if (e.touches.length === 0 && isDragging) {
+      setIsDragging(false);
+      const constrained = constrainPan(panPosition.x, panPosition.y);
+      setPanPosition(constrained);
+    }
+  };
+
   return (
     <div
       {...swipeHandlers}
@@ -381,6 +441,9 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Bottom layer: shows next image/video (fades in from 0 to 100) */}
       {isCurrentVideo ? (
@@ -389,10 +452,10 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
           src={ensureHttps(displayImage.url)}
           className="w-full h-full cursor-pointer select-none object-contain"
           style={{
-            ...(isZoomed
+            ...(zoomScale > 1
               ? {
                   cursor: isDragging ? 'grabbing' : 'grab',
-                  transform: `scale(3) translate(${panPosition.x / 3}px, ${panPosition.y / 3}px)`,
+                  transform: `scale(${zoomScale}) translate(${panPosition.x / zoomScale}px, ${panPosition.y / zoomScale}px)`,
                   transformOrigin: 'center center',
                   transition: isDragging ? 'none' : 'transform 0.2s'
                 }
@@ -420,10 +483,10 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
           alt={`Image ${displayIndex + 1} of ${images.length}`}
           className="w-full h-full cursor-pointer select-none object-contain"
           style={{
-            ...(isZoomed
+            ...(zoomScale > 1
               ? {
                   cursor: isDragging ? 'grabbing' : 'grab',
-                  transform: `scale(3) translate(${panPosition.x / 3}px, ${panPosition.y / 3}px)`,
+                  transform: `scale(${zoomScale}) translate(${panPosition.x / zoomScale}px, ${panPosition.y / zoomScale}px)`,
                   transformOrigin: 'center center',
                   transition: isDragging ? 'none' : 'transform 0.2s'
                 }

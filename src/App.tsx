@@ -307,8 +307,11 @@ function App() {
 
       if (error) throw error;
 
+      // Create images array - use DB images if available, otherwise use cover as placeholder
+      let images: CivitaiImage[] = [];
+
       if (imageData && imageData.length > 0) {
-        const images: CivitaiImage[] = imageData.map(img => ({
+        images = imageData.map(img => ({
           id: img.image_id,
           url: img.url,
           nsfw: img.nsfw,
@@ -318,7 +321,20 @@ function App() {
           postId: img.post_id,
           createdAt: img.created_at
         }));
+      } else if (postData?.cover_image_url) {
+        // No images in DB but we have a cover - use it as placeholder (cover-only post)
+        images = [{
+          id: 0,
+          url: postData.cover_image_url,
+          nsfw: false,
+          width: 0,
+          height: 0,
+          hash: '',
+          postId: nextPostId
+        }];
+      }
 
+      if (images.length > 0) {
         // Sort images so cover is always first (matching PostDetail behavior)
         const coverImageUrl = postData?.cover_image_url;
         const sortedImages = [...images].sort((a, b) => {
@@ -507,8 +523,11 @@ function App() {
 
       if (error) throw error;
 
+      // Create images array - use DB images if available, otherwise use cover as placeholder
+      let images: CivitaiImage[] = [];
+
       if (imageData && imageData.length > 0) {
-        const images: CivitaiImage[] = imageData.map(img => ({
+        images = imageData.map(img => ({
           id: img.image_id,
           url: img.url,
           nsfw: img.nsfw,
@@ -518,7 +537,20 @@ function App() {
           postId: img.post_id,
           createdAt: img.created_at
         }));
+      } else if (postData?.cover_image_url) {
+        // No images in DB but we have a cover - use it as placeholder (cover-only post)
+        images = [{
+          id: 0,
+          url: postData.cover_image_url,
+          nsfw: false,
+          width: 0,
+          height: 0,
+          hash: '',
+          postId: prevPostId
+        }];
+      }
 
+      if (images.length > 0) {
         // Sort images so cover is always first (matching PostDetail behavior)
         const coverImageUrl = postData?.cover_image_url;
         const sortedImages = [...images].sort((a, b) => {
