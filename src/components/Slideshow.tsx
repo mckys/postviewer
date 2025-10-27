@@ -393,11 +393,13 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       // Pinch started
+      e.preventDefault();
       const distance = getTouchDistance(e.touches);
       setInitialPinchDistance(distance);
       setInitialPinchScale(zoomScale);
     } else if (e.touches.length === 1 && zoomScale > 1) {
       // Single touch drag when zoomed
+      e.preventDefault();
       const touch = e.touches[0];
       setIsDragging(true);
       setDragStart({ x: touch.clientX - panPosition.x, y: touch.clientY - panPosition.y });
@@ -438,6 +440,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
     <div
       {...swipeHandlers}
       className="fixed inset-0 bg-black z-50 flex items-center justify-center overflow-hidden"
+      style={{ touchAction: 'none' }}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}

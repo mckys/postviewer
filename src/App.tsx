@@ -321,6 +321,7 @@ function App() {
           postId: img.post_id,
           createdAt: img.created_at
         }));
+        console.log(`➡️ Slideshow navigating to next post ${nextPostId}: ${images.length} DB images`);
       } else if (postData?.cover_image_url) {
         // No images in DB but we have a cover - use it as placeholder (cover-only post)
         images = [{
@@ -332,6 +333,9 @@ function App() {
           hash: '',
           postId: nextPostId
         }];
+        console.log(`➡️ Slideshow navigating to cover-only post ${nextPostId}: cover=${postData.cover_image_url.substring(0, 60)}...`);
+      } else {
+        console.warn(`⚠️ Post ${nextPostId} has no images and no cover_image_url`);
       }
 
       if (images.length > 0) {
@@ -346,6 +350,7 @@ function App() {
         // Update slideshow images and reset to first image
         setSlideshowImages(sortedImages);
         setSlideshowStartIndex(0);
+        console.log(`➡️ Final sorted images: ${sortedImages.length}, starting at first image (index 0)`);
 
         // Fetch the next-next post ID based on source view context
         let nextQuery = supabase.from('posts').select('post_id');
@@ -537,6 +542,7 @@ function App() {
           postId: img.post_id,
           createdAt: img.created_at
         }));
+        console.log(`⬅️ Slideshow navigating to prev post ${prevPostId}: ${images.length} DB images`);
       } else if (postData?.cover_image_url) {
         // No images in DB but we have a cover - use it as placeholder (cover-only post)
         images = [{
@@ -548,6 +554,9 @@ function App() {
           hash: '',
           postId: prevPostId
         }];
+        console.log(`⬅️ Slideshow navigating to cover-only prev post ${prevPostId}: cover=${postData.cover_image_url.substring(0, 60)}...`);
+      } else {
+        console.warn(`⚠️ Prev post ${prevPostId} has no images and no cover_image_url`);
       }
 
       if (images.length > 0) {
@@ -559,12 +568,7 @@ function App() {
           return 0;
         });
 
-        console.log(`⬅️ Slideshow navigating to prev post ${prevPostId}: ${sortedImages.length} images, starting at index ${sortedImages.length - 1}`);
-        console.log(`   Cover URL: ${coverImageUrl?.substring(0, 60)}...`);
-        sortedImages.forEach((img, idx) => {
-          const isCover = img.url === coverImageUrl;
-          console.log(`   [${idx + 1}] ${isCover ? '⭐ ' : '   '}${img.url.substring(0, 60)}... (id: ${img.id})`);
-        });
+        console.log(`⬅️ Final sorted images: ${sortedImages.length}, starting at last image (index ${sortedImages.length - 1})`);
 
         // Update slideshow images and start at last image
         setSlideshowImages(sortedImages);
