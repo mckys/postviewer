@@ -407,12 +407,6 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    // Don't interfere with button clicks
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'BUTTON' || target.closest('button')) {
-      return;
-    }
-
     if (e.touches.length === 2) {
       // Pinch started
       e.preventDefault();
@@ -465,9 +459,6 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
     >
       {/* Bottom layer: shows next image/video (fades in from 0 to 100) */}
       {isCurrentVideo ? (
@@ -492,6 +483,9 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
           }}
           onClick={handleImageClick}
           onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           onLoadedMetadata={(e) => {
             const video = e.target as HTMLVideoElement;
             setActualDimensions({ width: video.videoWidth, height: video.videoHeight });
@@ -524,6 +518,9 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
           }}
           onClick={handleImageClick}
           onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           onLoad={(e) => {
             const img = e.target as HTMLImageElement;
             setActualDimensions({ width: img.naturalWidth, height: img.naturalHeight });
