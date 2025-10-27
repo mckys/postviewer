@@ -407,6 +407,12 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    // Don't interfere with button clicks
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'BUTTON' || target.closest('button')) {
+      return;
+    }
+
     if (e.touches.length === 2) {
       // Pinch started
       e.preventDefault();
@@ -456,7 +462,6 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
     <div
       {...swipeHandlers}
       className="fixed inset-0 bg-black z-50 flex items-center justify-center overflow-hidden"
-      style={{ touchAction: 'none' }}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
@@ -471,6 +476,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
           src={ensureHttps(displayImage.url)}
           className="w-full h-full cursor-pointer select-none object-contain"
           style={{
+            touchAction: 'none',
             ...(zoomScale > 1
               ? {
                   cursor: isDragging ? 'grabbing' : 'grab',
@@ -502,6 +508,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
           alt={`Image ${displayIndex + 1} of ${images.length}`}
           className="w-full h-full cursor-pointer select-none object-contain"
           style={{
+            touchAction: 'none',
             ...(zoomScale > 1
               ? {
                   cursor: isDragging ? 'grabbing' : 'grab',
