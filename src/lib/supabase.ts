@@ -67,3 +67,30 @@ export function extractUsernameFromUrl(url: string): string | null {
   const match = url.match(/civitai\.com\/user\/([^\/]+)/);
   return match ? match[1] : null;
 }
+
+/**
+ * Ensure URL has https:// protocol
+ * @param url - URL that may or may not have protocol
+ * @returns URL with https:// protocol
+ */
+export function ensureHttps(url: string | null | undefined): string {
+  if (!url) return '';
+
+  // Trim whitespace
+  const trimmed = url.trim();
+
+  // Already has full protocol with two slashes
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+    return trimmed;
+  }
+
+  // Has malformed protocol (missing slashes or colon)
+  // Examples: "https:/image.com", "https/image.com", "http:/image.com", "http/image.com"
+  if (trimmed.match(/^https?[:/]/)) {
+    // Strip the malformed protocol and add correct one
+    return trimmed.replace(/^https?[:/]+/, 'https://');
+  }
+
+  // Missing protocol entirely, add it
+  return `https://${trimmed}`;
+}

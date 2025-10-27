@@ -1,11 +1,70 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { getStoredProfiles, type StoredProfile } from '../lib/profiles';
+import { Star } from 'lucide-react';
+
 interface NavigationProps {
   currentView: 'feed' | 'myposts' | 'favorites' | 'settings' | 'none';
   onViewChange: (view: 'feed' | 'myposts' | 'favorites' | 'settings') => void;
   showBackButton?: boolean;
   onBack?: () => void;
+  onProfileSwitch?: () => void;
 }
 
-export const Navigation = ({ currentView, onViewChange, showBackButton, onBack }: NavigationProps) => {
+export const Navigation = ({ currentView, onViewChange, showBackButton, onBack, onProfileSwitch }: NavigationProps) => {
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [storedProfiles, setStoredProfiles] = useState<StoredProfile[]>([]);
+  const [currentEmail, setCurrentEmail] = useState('');
+
+  useEffect(() => {
+    loadProfiles();
+    loadCurrentUser();
+
+    // Listen for profile updates from Settings
+    const handleProfilesUpdate = () => {
+      loadProfiles();
+    };
+
+    window.addEventListener('profilesUpdated', handleProfilesUpdate);
+    return () => window.removeEventListener('profilesUpdated', handleProfilesUpdate);
+  }, []);
+
+  async function loadCurrentUser() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email) {
+      setCurrentEmail(user.email);
+    }
+  }
+
+  function loadProfiles() {
+    const profiles = getStoredProfiles();
+    setStoredProfiles(profiles);
+  }
+
+  async function handleSwitchProfile(email: string, password: string) {
+    try {
+      // Sign out current user
+      await supabase.auth.signOut();
+
+      // Sign in with new profile
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      // Close dropdown and trigger refresh
+      setShowProfileDropdown(false);
+      onProfileSwitch?.();
+      window.location.reload();
+    } catch (err) {
+      alert('Error switching profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  }
+
+  const currentProfile = storedProfiles.find(p => p.email === currentEmail);
+
   return (
     <nav className="sticky top-0 z-50 bg-white border-b border-gray-200">
       <div className="container mx-auto px-4">
@@ -31,7 +90,59 @@ export const Navigation = ({ currentView, onViewChange, showBackButton, onBack }
               </svg>
             </button>
           ) : (
-            <h1 className="text-xl font-bold text-gray-900">PostViewer</h1>
+            <div className="relative">
+              <button
+                onClick={() => storedProfiles.length > 1 && setShowProfileDropdown(!showProfileDropdown)}
+                className={storedProfiles.length > 1 ? "hover:opacity-80 transition-opacity" : ""}
+                title={storedProfiles.length > 1 ? "Switch profile" : ""}
+              >
+                <svg className="h-8 w-8" viewBox="0 0 186 186" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="0.692749" y="0.803589" width="184.393" height="184.393" rx="40" fill="#FF1919"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 113.23 72.6595)" fill="white"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 113.23 118.529)" fill="white" fillOpacity="0.5"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 113.23 26.7895)" fill="white"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 67.7185 72.6595)" fill="white"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 67.7185 118.529)" fill="white"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 67.7185 26.7895)" fill="white"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 158.741 72.6595)" fill="white" fillOpacity="0.5"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 158.741 118.529)" fill="white" fillOpacity="0.5"/>
+                  <rect width="40.681" height="40.681" rx="9" transform="matrix(-1 0 0 1 158.741 26.7895)" fill="white" fillOpacity="0.5"/>
+                </svg>
+              </button>
+
+              {showProfileDropdown && storedProfiles.length > 1 && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowProfileDropdown(false)}
+                  />
+                  <div className="absolute top-full left-0 mt-1 w-40 bg-gray-100 border border-gray-200 rounded-lg shadow-lg p-2 z-50">
+                    {storedProfiles.map((profile) => {
+                      const isCurrent = profile.email === currentEmail;
+                      return (
+                        <button
+                          key={profile.email}
+                          onClick={() => {
+                            if (!isCurrent) {
+                              handleSwitchProfile(profile.email, profile.password);
+                            }
+                          }}
+                          className="w-full text-left px-3 py-2 mb-1 last:mb-0 bg-white hover:bg-gray-50 transition-colors rounded flex items-center justify-between gap-2"
+                          disabled={isCurrent}
+                        >
+                          <div className="font-medium text-gray-900 truncate">
+                            {profile.nickname || profile.email}
+                          </div>
+                          {isCurrent && (
+                            <Star className="w-4 h-4 text-red-600 fill-red-600 flex-shrink-0" strokeWidth={0} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           )}
           <div className="flex gap-3 sm:gap-6">
             {/* Home (Feed) */}

@@ -7,12 +7,13 @@ import { PostDetail } from './components/PostDetail';
 import { Slideshow } from './components/Slideshow';
 import { CreatorFeed } from './components/CreatorFeed';
 import { HiddenPosts } from './components/HiddenPosts';
+import { UnclaimedPosts } from './components/UnclaimedPosts';
 import { Login } from './components/Login';
 import { CivitaiImage } from './lib/civitai';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
-type View = 'feed' | 'myposts' | 'favorites' | 'settings' | 'post-detail' | 'creator-feed' | 'hidden-posts';
+type View = 'feed' | 'myposts' | 'favorites' | 'settings' | 'post-detail' | 'creator-feed' | 'hidden-posts' | 'unclaimed-posts';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -28,10 +29,20 @@ function App() {
   const [slideshowStartIndex, setSlideshowStartIndex] = useState(0);
   const [scrollPositions, setScrollPositions] = useState<Map<string, number>>(new Map());
   const [shouldRestoreScroll, setShouldRestoreScroll] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [updatedPostImageCount, setUpdatedPostImageCount] = useState<{ postId: number; imageCount: number } | null>(null);
+  const [feedRefreshTrigger, setFeedRefreshTrigger] = useState(0);
+  const [creatorFeedRefreshTrigger, setCreatorFeedRefreshTrigger] = useState(0);
+  const [favoritesRefreshTrigger, setFavoritesRefreshTrigger] = useState(0);
+  const [updatedPostData, setUpdatedPostData] = useState<{ postId: number; imageCount?: number; coverImageUrl?: string } | null>(null);
   const [shouldRemount, setShouldRemount] = useState(true);
   const [myUsername, setMyUsername] = useState<string | null>(null);
+
+  // Handler for when favorites/interactions change in any feed
+  const handlePostInteractionChange = (sourceView: 'feed' | 'creator' | 'favorites') => {
+    // Trigger refresh for all OTHER feeds (not the source)
+    if (sourceView !== 'feed') setFeedRefreshTrigger(prev => prev + 1);
+    if (sourceView !== 'creator') setCreatorFeedRefreshTrigger(prev => prev + 1);
+    if (sourceView !== 'favorites') setFavoritesRefreshTrigger(prev => prev + 1);
+  };
 
   // Fetch user's username from settings
   useEffect(() => {
@@ -70,7 +81,18 @@ function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Listen for manual sync trigger from Settings
+    const handleTriggerSync = () => {
+      console.log('🔄 Manual sync triggered from Settings...');
+      startBackgroundSync();
+    };
+
+    window.addEventListener('triggerSync', handleTriggerSync);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('triggerSync', handleTriggerSync);
+    };
   }, []);
 
   // Background sync - check for stale creators and sync them
@@ -86,8 +108,16 @@ function App() {
         // Run sync in background without blocking UI
         syncAllCreators().then(() => {
           console.log('✅ Background sync completed');
-          // Trigger refresh of feeds
-          setRefreshTrigger(prev => prev + 1);
+          // Trigger refresh of feeds - but don't interrupt active viewing
+          // Only refresh if user is not currently viewing that specific feed
+          setFeedRefreshTrigger((prev: number) => prev + 1);
+          // Don't refresh creator feed if user is actively viewing it
+          if (currentView !== 'creator-feed' && currentView !== 'myposts') {
+            setCreatorFeedRefreshTrigger((prev: number) => prev + 1);
+          }
+          setFavoritesRefreshTrigger((prev: number) => prev + 1);
+          // Dispatch event for Settings to refresh stats
+          window.dispatchEvent(new Event('syncCompleted'));
         }).catch(err => {
           console.error('❌ Background sync failed:', err);
         });
@@ -181,18 +211,24 @@ function App() {
 
   // Track current post image count for updates
   const [currentPostImageCount, setCurrentPostImageCount] = useState<number | null>(null);
+  const [currentPostCoverUrl, setCurrentPostCoverUrl] = useState<string | null>(null);
 
-  const handleBackToFeed = (postId?: number, imageCount?: number) => {
+  const handleBackToFeed = (postId?: number, imageCount?: number, coverImageUrl?: string) => {
     const previousView = viewHistory[viewHistory.length - 1] || 'feed';
     setViewHistory(viewHistory.slice(0, -1));
 
     // Use provided values or fallback to tracked values
     const finalPostId = postId ?? selectedPostId;
     const finalImageCount = imageCount ?? currentPostImageCount;
+    const finalCoverUrl = coverImageUrl ?? currentPostCoverUrl;
 
-    // Store the updated image count if we have the data
-    if (finalPostId !== null && finalImageCount !== null) {
-      setUpdatedPostImageCount({ postId: finalPostId, imageCount: finalImageCount });
+    // Store the updated data if we have any changes
+    if (finalPostId !== null && (finalImageCount !== null || finalCoverUrl !== null)) {
+      setUpdatedPostData({
+        postId: finalPostId,
+        imageCount: finalImageCount ?? undefined,
+        coverImageUrl: finalCoverUrl ?? undefined
+      });
     }
 
     // Don't remount when using back button
@@ -209,8 +245,9 @@ function App() {
       setSelectedCreatorForBack(null);
     }
 
-    // Clear tracked image count
+    // Clear tracked data
     setCurrentPostImageCount(null);
+    setCurrentPostCoverUrl(null);
 
     // Trigger scroll restoration
     setShouldRestoreScroll(true);
@@ -702,42 +739,58 @@ function App() {
         onBack={handleBackToFeed}
       />
 
-      <div style={{ display: currentView === 'feed' ? 'block' : 'none' }} key={shouldRemount && currentView === 'feed' ? `feed-${refreshTrigger}` : 'feed-persistent'}>
+      <div style={{ display: currentView === 'feed' ? 'block' : 'none' }} key={shouldRemount && currentView === 'feed' ? `feed-${feedRefreshTrigger}` : 'feed-persistent'}>
         <Feed
           onPostClick={handlePostClick}
           onCreatorClick={handleCreatorClick}
-          refreshTrigger={refreshTrigger}
-          updatedPostImageCount={updatedPostImageCount}
+          refreshTrigger={feedRefreshTrigger}
+          updatedPostData={updatedPostData}
+          onPostInteractionChange={() => handlePostInteractionChange('feed')}
         />
       </div>
-      <div style={{ display: currentView === 'myposts' ? 'block' : 'none' }} key={shouldRemount && currentView === 'myposts' ? `myposts-${refreshTrigger}` : 'myposts-persistent'}>
+      <div style={{ display: currentView === 'myposts' ? 'block' : 'none' }} key={shouldRemount && currentView === 'myposts' ? `myposts-${creatorFeedRefreshTrigger}` : 'myposts-persistent'}>
         {myUsername && (
           <CreatorFeed
             username={myUsername}
             onPostClick={handlePostClick}
-            refreshTrigger={refreshTrigger}
-            updatedPostImageCount={updatedPostImageCount}
+            refreshTrigger={creatorFeedRefreshTrigger}
+            updatedPostData={updatedPostData}
+            onPostInteractionChange={() => handlePostInteractionChange('creator')}
           />
         )}
       </div>
-      <div style={{ display: currentView === 'favorites' ? 'block' : 'none' }} key={shouldRemount && currentView === 'favorites' ? `favorites-${refreshTrigger}` : 'favorites-persistent'}>
+      <div style={{ display: currentView === 'favorites' ? 'block' : 'none' }} key={shouldRemount && currentView === 'favorites' ? `favorites-${favoritesRefreshTrigger}` : 'favorites-persistent'}>
         <Favorites
           onPostClick={handlePostClick}
           onCreatorClick={handleCreatorClick}
-          refreshTrigger={refreshTrigger}
-          updatedPostImageCount={updatedPostImageCount}
+          refreshTrigger={favoritesRefreshTrigger}
+          updatedPostData={updatedPostData}
+          onPostInteractionChange={() => handlePostInteractionChange('favorites')}
         />
       </div>
       <div style={{ display: currentView === 'settings' ? 'block' : 'none' }}>
         <Settings
           onCreatorClick={handleCreatorClick}
           onViewHidden={() => setCurrentView('hidden-posts')}
-          onNSFWToggle={() => setRefreshTrigger(prev => prev + 1)}
+          onViewUnclaimed={() => setCurrentView('unclaimed-posts')}
+          onNSFWToggle={() => {
+            setFeedRefreshTrigger(prev => prev + 1);
+            setCreatorFeedRefreshTrigger(prev => prev + 1);
+            setFavoritesRefreshTrigger(prev => prev + 1);
+          }}
         />
       </div>
       <div style={{ display: currentView === 'hidden-posts' ? 'block' : 'none' }}>
         {currentView === 'hidden-posts' && (
           <HiddenPosts
+            onPostClick={handlePostClick}
+            onCreatorClick={handleCreatorClick}
+          />
+        )}
+      </div>
+      <div style={{ display: currentView === 'unclaimed-posts' ? 'block' : 'none' }}>
+        {currentView === 'unclaimed-posts' && (
+          <UnclaimedPosts
             onPostClick={handlePostClick}
             onCreatorClick={handleCreatorClick}
           />
@@ -749,8 +802,9 @@ function App() {
             username={selectedCreator}
             onPostClick={handlePostClick}
             onBack={handleBackToFeed}
-            refreshTrigger={refreshTrigger}
-            updatedPostImageCount={updatedPostImageCount}
+            refreshTrigger={creatorFeedRefreshTrigger}
+            updatedPostData={updatedPostData}
+            onPostInteractionChange={() => handlePostInteractionChange('creator')}
           />
         )}
       </div>
@@ -764,6 +818,7 @@ function App() {
           sourceView={postSourceView}
           creatorUsername={postSourceView === 'creator-feed' ? selectedCreatorForBack || undefined : undefined}
           onImageCountChange={setCurrentPostImageCount}
+          onCoverImageChange={setCurrentPostCoverUrl}
         />
       )}
 

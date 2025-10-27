@@ -1,8 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { saveProfile, setCurrentProfileEmail } from '../lib/profiles';
 
 interface LoginProps {
   onLoginSuccess: () => void;
+}
+
+// Get random background image based on screen size
+function getRandomBackgroundImage() {
+  const isMobile = window.innerWidth < 768; // Mobile breakpoint
+  const folder = isMobile ? 'bg_mobile' : 'bg_desktop';
+  const imageCount = 13; // 000-012
+  const randomIndex = Math.floor(Math.random() * imageCount);
+  const paddedIndex = String(randomIndex).padStart(3, '0');
+  const imagePath = `/img/${folder}/${paddedIndex}.jpg`;
+  console.log('🖼️ Loading background image:', imagePath);
+  return imagePath;
 }
 
 export const Login = ({ onLoginSuccess }: LoginProps) => {
@@ -13,6 +26,9 @@ export const Login = ({ onLoginSuccess }: LoginProps) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+
+  // Select random background once on mount
+  const backgroundImage = useMemo(() => getRandomBackgroundImage(), []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +49,11 @@ export const Login = ({ onLoginSuccess }: LoginProps) => {
           password,
         });
         if (error) throw error;
+
+        // Save profile to localStorage for quick switching
+        saveProfile({ email, password });
+        setCurrentProfileEmail(email);
+
         onLoginSuccess();
       }
     } catch (err) {
@@ -66,11 +87,20 @@ export const Login = ({ onLoginSuccess }: LoginProps) => {
 
   if (showForgotPassword) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{
+          backgroundImage: `url(${backgroundImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
         <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            Reset Password
-          </h1>
+          <div className="flex flex-col items-center mb-6">
+            <img src="/img/Frame 3.svg" alt="PostViewer Logo" className="h-16 w-16 mb-2" />
+            <h1 className="text-2xl font-bold text-gray-900">PostViewer</h1>
+          </div>
 
           <form onSubmit={handleForgotPassword} className="space-y-4">
             <div>
@@ -125,11 +155,20 @@ export const Login = ({ onLoginSuccess }: LoginProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{
+        backgroundImage: `url(${backgroundImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
       <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-          {isSignUp ? 'Create Account' : 'Sign In'}
-        </h1>
+        <div className="flex flex-col items-center mb-6">
+          <img src="/img/Frame 3.svg" alt="PostViewer Logo" className="h-16 w-16 mb-2" />
+          <h1 className="text-2xl font-bold text-gray-900">PostViewer</h1>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, getUserNSFWPreference } from '../lib/supabase';
+import { supabase, getUserNSFWPreference, ensureHttps } from '../lib/supabase';
 import Masonry from 'react-masonry-css';
 
 interface PostPreview {
@@ -17,7 +17,8 @@ interface FavoritesProps {
   onPostClick?: (postId: number) => void;
   onCreatorClick?: (username: string) => void;
   refreshTrigger?: number;
-  updatedPostImageCount?: { postId: number; imageCount: number } | null;
+  updatedPostData?: { postId: number; imageCount?: number; coverImageUrl?: string } | null;
+  onPostInteractionChange?: () => void;
 }
 
 interface PostCardProps {
@@ -72,7 +73,7 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
           {post.coverImageUrl ? (
             mediaType === 'video' ? (
               <video
-                src={post.coverImageUrl}
+                src={ensureHttps(post.coverImageUrl)}
                 className="w-full h-auto relative z-10"
                 style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
                 autoPlay
@@ -84,7 +85,7 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
               />
             ) : (
               <img
-                src={post.coverImageUrl}
+                src={ensureHttps(post.coverImageUrl)}
                 alt={`Post ${post.postId} by ${post.username}`}
                 className="w-full h-auto relative z-10"
                 style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
@@ -189,23 +190,27 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
   );
 };
 
-export const Favorites = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostImageCount }: FavoritesProps) => {
+export const Favorites = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostData, onPostInteractionChange }: FavoritesProps) => {
   const [posts, setPosts] = useState<PostPreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Update post image count when returning from post detail
   useEffect(() => {
-    if (updatedPostImageCount) {
+    if (updatedPostData) {
       setPosts(prevPosts =>
         prevPosts.map(post =>
-          post.postId === updatedPostImageCount.postId
-            ? { ...post, imageCount: updatedPostImageCount.imageCount }
+          post.postId === updatedPostData.postId
+            ? {
+                ...post,
+                ...(updatedPostData.imageCount !== undefined && { imageCount: updatedPostData.imageCount }),
+                ...(updatedPostData.coverImageUrl !== undefined && { coverImageUrl: updatedPostData.coverImageUrl })
+              }
             : post
         )
       );
     }
-  }, [updatedPostImageCount]);
+  }, [updatedPostData]);
 
   useEffect(() => {
     fetchFavorites();
@@ -217,6 +222,7 @@ export const Favorites = ({ onPostClick, onCreatorClick, refreshTrigger, updated
       fetchFavorites();
     }
   }, [refreshTrigger]);
+
 
   async function fetchFavorites() {
     try {
@@ -390,6 +396,9 @@ export const Favorites = ({ onPostClick, onCreatorClick, refreshTrigger, updated
           .from('post_interactions')
           .insert({ post_id: postId, user_id: user.id, is_favorited: newState });
       }
+
+      // Notify parent to refresh other feeds
+      onPostInteractionChange?.();
     } catch (err) {
       console.error('Error favoriting post:', err);
       fetchFavorites();

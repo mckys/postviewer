@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { supabase, getUserNSFWPreference } from '../lib/supabase';
+import { supabase, getUserNSFWPreference, ensureHttps } from '../lib/supabase';
 import Masonry from 'react-masonry-css';
-import { RefreshCw, ExternalLink } from 'lucide-react';
+import { RefreshCw, ExternalLink, ArrowUp } from 'lucide-react';
 
 interface PostPreview {
   postId: number;
@@ -18,7 +18,8 @@ interface CreatorFeedProps {
   onPostClick?: (postId: number) => void;
   onBack?: () => void;
   refreshTrigger?: number;
-  updatedPostImageCount?: { postId: number; imageCount: number } | null;
+  updatedPostData?: { postId: number; imageCount?: number; coverImageUrl?: string } | null;
+  onPostInteractionChange?: () => void;
 }
 
 interface PostCardProps {
@@ -60,19 +61,15 @@ const PostCard = ({ post, onPostClick, onToggleFavorite, onToggleHide }: PostCar
 
         {/* Image or Video */}
         <div
-          className="cursor-pointer relative bg-gray-100"
+          className="cursor-pointer relative bg-white"
           style={post.coverWidth && post.coverHeight ? { aspectRatio: `${post.coverWidth} / ${post.coverHeight}` } : undefined}
           onClick={() => onPostClick?.(post.postId)}
         >
-          {/* Loading skeleton */}
-          {!imageLoaded && (
-            <div className="absolute inset-0 bg-gray-200 animate-pulse" />
-          )}
 
           {post.coverImageUrl ? (
             mediaType === 'video' ? (
               <video
-                src={post.coverImageUrl}
+                src={ensureHttps(post.coverImageUrl)}
                 className="w-full h-auto relative z-10"
                 style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
                 autoPlay
@@ -84,12 +81,11 @@ const PostCard = ({ post, onPostClick, onToggleFavorite, onToggleHide }: PostCar
               />
             ) : (
               <img
-                src={post.coverImageUrl}
+                src={ensureHttps(post.coverImageUrl)}
                 alt={`Post ${post.postId}`}
                 className="w-full h-auto relative z-10"
                 style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
                 onLoad={() => setImageLoaded(true)}
-                loading="lazy"
               />
             )
           ) : (
@@ -178,31 +174,88 @@ const PostCard = ({ post, onPostClick, onToggleFavorite, onToggleHide }: PostCar
   );
 };
 
-export const CreatorFeed = ({ username, onPostClick, onBack, refreshTrigger, updatedPostImageCount }: CreatorFeedProps) => {
+export const CreatorFeed = ({ username, onPostClick, onBack, refreshTrigger, updatedPostData, onPostInteractionChange }: CreatorFeedProps) => {
   const [posts, setPosts] = useState<PostPreview[]>([]);
+  const [displayedPosts, setDisplayedPosts] = useState<PostPreview[]>([]);
+  const [page, setPage] = useState(1);
   const [totalPostCount, setTotalPostCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncDate, setLastSyncDate] = useState<string>('');
   const [syncing, setSyncing] = useState(false);
   const [nsfwFilterActive, setNsfwFilterActive] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const POSTS_PER_PAGE = 100;
+  const INITIAL_POSTS = 50;
 
   // Update post image count when returning from post detail
   useEffect(() => {
-    if (updatedPostImageCount) {
+    if (updatedPostData) {
       setPosts(prevPosts =>
         prevPosts.map(post =>
-          post.postId === updatedPostImageCount.postId
-            ? { ...post, imageCount: updatedPostImageCount.imageCount }
+          post.postId === updatedPostData.postId
+            ? {
+                ...post,
+                ...(updatedPostData.imageCount !== undefined && { imageCount: updatedPostData.imageCount }),
+                ...(updatedPostData.coverImageUrl !== undefined && { coverImageUrl: updatedPostData.coverImageUrl })
+              }
             : post
         )
       );
     }
-  }, [updatedPostImageCount]);
+  }, [updatedPostData]);
 
+  // Update displayed posts when page changes
+  useEffect(() => {
+    const displayCount = page === 1 ? INITIAL_POSTS : INITIAL_POSTS + (page - 1) * POSTS_PER_PAGE;
+    setDisplayedPosts(posts.slice(0, displayCount));
+  }, [posts, page]);
+
+  // Scroll handler for progressive loading and back-to-top button
+  useEffect(() => {
+    const handleScroll = () => {
+      // Show back-to-top button after scrolling 800px
+      setShowBackToTop(window.scrollY > 800);
+
+      // Infinite scroll: load more posts near bottom (increased threshold for fast scrolling)
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2000) {
+        const currentDisplayCount = page === 1 ? INITIAL_POSTS : INITIAL_POSTS + (page - 1) * POSTS_PER_PAGE;
+
+        if (currentDisplayCount < posts.length) {
+          setPage(prev => prev + 1);
+        } else if (hasMore && !loadingMore) {
+          // Load more from database when we've displayed all fetched posts
+          loadMorePosts();
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [page, posts.length, hasMore, loadingMore]);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Fetch posts when username changes or on initial mount
   useEffect(() => {
     fetchCreatorPosts();
-  }, [username, refreshTrigger]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username]);
+
+  // Refresh when trigger changes
+  useEffect(() => {
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      fetchCreatorPosts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger]);
+
 
   async function fetchCreatorPosts() {
     try {
@@ -231,6 +284,45 @@ export const CreatorFeed = ({ username, onPostClick, onBack, refreshTrigger, upd
       // Track if NSFW filter is active
       setNsfwFilterActive(!showNSFW);
 
+      // Get count of visible posts (after NSFW filtering)
+      let countQuery = supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('creator_username', username)
+        .not('cover_image_url', 'is', null);
+
+      if (!showNSFW) {
+        countQuery = countQuery.eq('nsfw', false);
+      }
+
+      const { count } = await countQuery;
+
+      // Get count of hidden posts that would appear in this feed
+      const { data: hiddenPosts } = await supabase
+        .from('post_interactions')
+        .select('post_id')
+        .eq('user_id', user.id)
+        .eq('is_hidden', true);
+
+      if (!hiddenPosts || hiddenPosts.length === 0) {
+        setTotalCount(count || 0);
+      } else {
+        // Count how many of these hidden posts would have been in the feed
+        let hiddenCountQuery = supabase
+          .from('posts')
+          .select('*', { count: 'exact', head: true })
+          .in('post_id', hiddenPosts.map(p => p.post_id))
+          .eq('creator_username', username)
+          .not('cover_image_url', 'is', null);
+
+        if (!showNSFW) {
+          hiddenCountQuery = hiddenCountQuery.eq('nsfw', false);
+        }
+
+        const { count: hiddenInFeedCount } = await hiddenCountQuery;
+        setTotalCount((count || 0) - (hiddenInFeedCount || 0));
+      }
+
       // Get posts from database for this creator
       let query = supabase
         .from('posts')
@@ -246,7 +338,9 @@ export const CreatorFeed = ({ username, onPostClick, onBack, refreshTrigger, upd
         console.log(`✅ CreatorFeed - Showing all posts including NSFW`);
       }
 
-      query = query.order('post_id', { ascending: false }); // Sort by post_id (higher = newer)
+      query = query
+        .order('post_id', { ascending: false }) // Sort by post_id (higher = newer)
+        .limit(100); // Start with 100 posts, load more on scroll
 
       const { data: postsData, error: postsError } = await query;
 
@@ -338,10 +432,93 @@ export const CreatorFeed = ({ username, onPostClick, onBack, refreshTrigger, upd
       console.log(`🙈 Hidden posts: ${postsWithCounts.length - visiblePosts.length}`);
 
       setPosts(visiblePosts);
+      setOffset(100); // Set offset for next fetch
+      setHasMore(postsData.length === 100); // If we got fewer than 100 from DB, no more to load
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadMorePosts() {
+    if (loadingMore || !hasMore) return;
+
+    try {
+      setLoadingMore(true);
+      console.log(`📥 Loading more posts from offset ${offset}...`);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get user's NSFW preference
+      const showNSFW = await getUserNSFWPreference();
+
+      // Get more posts
+      let query = supabase
+        .from('posts')
+        .select('post_id, cover_image_url, cover_width, cover_height, published_at, image_count, updated_at, nsfw')
+        .eq('creator_username', username)
+        .not('cover_image_url', 'is', null);
+
+      if (!showNSFW) {
+        query = query.eq('nsfw', false);
+      }
+
+      query = query
+        .order('post_id', { ascending: false })
+        .range(offset, offset + 99); // Fetch next 100 posts
+
+      const { data: postsData, error: postsError } = await query;
+
+      if (postsError) throw postsError;
+
+      console.log(`📥 Loaded ${postsData?.length || 0} more posts`);
+
+      if (!postsData || postsData.length === 0) {
+        setHasMore(false);
+        return;
+      }
+
+      // Get post interactions
+      const { data: interactions } = await supabase
+        .from('post_interactions')
+        .select('*')
+        .eq('user_id', user.id);
+
+      const interactionsMap = new Map(
+        interactions?.map(i => [i.post_id, { isHidden: i.is_hidden, isFavorited: i.is_favorited }]) || []
+      );
+
+      // Map new posts
+      const newPosts = postsData.map((post) => {
+        const interaction = interactionsMap.get(post.post_id);
+        return {
+          postId: post.post_id,
+          coverImageUrl: post.cover_image_url,
+          coverWidth: post.cover_width,
+          coverHeight: post.cover_height,
+          imageCount: post.image_count || 0,
+          isHidden: interaction?.isHidden || false,
+          isFavorited: interaction?.isFavorited || false
+        };
+      });
+
+      // Filter out hidden posts
+      const visibleNewPosts = newPosts.filter(p => !p.isHidden);
+
+      // Append to existing posts, avoiding duplicates
+      setPosts(prev => {
+        const existingIds = new Set(prev.map(p => p.postId));
+        const uniqueNewPosts = visibleNewPosts.filter(p => !existingIds.has(p.postId));
+        return [...prev, ...uniqueNewPosts];
+      });
+      setOffset(prev => prev + 100);
+      setHasMore(postsData.length === 100); // If we got fewer than 100, no more to load
+    } catch (err) {
+      console.error('Error loading more posts:', err);
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -413,6 +590,9 @@ export const CreatorFeed = ({ username, onPostClick, onBack, refreshTrigger, upd
           .from('post_interactions')
           .insert({ post_id: postId, user_id: user.id, is_favorited: newState });
       }
+
+      // Notify parent to refresh other feeds
+      onPostInteractionChange?.();
     } catch (err) {
       console.error('Error favoriting post:', err);
       fetchCreatorPosts();
@@ -553,7 +733,7 @@ export const CreatorFeed = ({ username, onPostClick, onBack, refreshTrigger, upd
         className="flex -ml-3 w-auto"
         columnClassName="pl-3 bg-clip-padding"
       >
-        {posts.map((post) => (
+        {displayedPosts.map((post) => (
           <PostCard
             key={post.postId}
             post={post}
@@ -563,6 +743,27 @@ export const CreatorFeed = ({ username, onPostClick, onBack, refreshTrigger, upd
           />
         ))}
       </Masonry>
+
+      <div className="mt-8 mb-24 text-center text-gray-600">
+        Showing {displayedPosts.length} of {totalCount !== null ? totalCount : posts.length} {(totalCount !== null ? totalCount : posts.length) === 1 ? 'post' : 'posts'}
+        {loadingMore && (
+          <div className="mt-4 text-sm text-gray-500">Loading more posts...</div>
+        )}
+        {!hasMore && posts.length > 0 && (
+          <div className="mt-4 text-sm text-gray-500">All posts loaded</div>
+        )}
+      </div>
+
+      {/* Back to Top Button */}
+      {showBackToTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-8 left-1/2 -translate-x-1/2 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-red-600 hover:text-white transition-colors z-50"
+          title="Back to top"
+        >
+          <ArrowUp className="w-6 h-6" />
+        </button>
+      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureHttps } from '../lib/supabase';
 import { CivitaiImage } from '../lib/civitai';
 import { Pencil, PencilOff, RefreshCw, ExternalLink, Download, Play, Settings, Info } from 'lucide-react';
 import JSZip from 'jszip';
@@ -8,15 +8,16 @@ import { useSwipeable } from 'react-swipeable';
 interface PostDetailProps {
   postId: number;
   onImageClick?: (images: CivitaiImage[], startIndex: number, nextPostId?: number, prevPostId?: number) => void;
-  onBack?: (postId?: number, imageCount?: number) => void;
+  onBack?: (postId?: number, imageCount?: number, coverImageUrl?: string) => void;
   onNavigatePost?: (postId: number) => void;
   onCreatorClick?: (username: string) => void;
   sourceView?: 'feed' | 'myposts' | 'favorites' | 'creator-feed';
   creatorUsername?: string;
   onImageCountChange?: (count: number) => void;
+  onCoverImageChange?: (url: string) => void;
 }
 
-export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCreatorClick, sourceView, creatorUsername, onImageCountChange }: PostDetailProps) => {
+export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCreatorClick, sourceView, creatorUsername, onImageCountChange, onCoverImageChange }: PostDetailProps) => {
   const [images, setImages] = useState<CivitaiImage[]>([]);
   const [postTitle, setPostTitle] = useState<string>('');
   const [creatorName, setCreatorName] = useState<string>('');
@@ -42,8 +43,23 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
   const [downloading, setDownloading] = useState(false);
   const [loadedImages, setLoadedImages] = useState<Set<number>>(new Set());
   const [mediaTypes, setMediaTypes] = useState<Map<number, 'video' | 'image'>>(new Map());
+  const [allowedToLoadCount, setAllowedToLoadCount] = useState(2); // Start with first 2 images
+
+  // Progressive image loading: increase allowed count as images load
+  useEffect(() => {
+    if (loadedImages.size >= allowedToLoadCount && allowedToLoadCount < images.length) {
+      // When current batch is loaded, allow 2 more images
+      const timer = setTimeout(() => {
+        setAllowedToLoadCount(prev => Math.min(prev + 2, images.length));
+      }, 100); // Small delay to prevent overwhelming
+      return () => clearTimeout(timer);
+    }
+  }, [loadedImages.size, allowedToLoadCount, images.length]);
 
   useEffect(() => {
+    // Reset progressive loading when post changes
+    setAllowedToLoadCount(2);
+    setLoadedImages(new Set());
     fetchPost();
     fetchAdjacentPosts();
   }, [postId, sourceView, creatorUsername]);
@@ -87,15 +103,24 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
           }
         }
       } else if (sourceView === 'favorites') {
-        // Favorites: only favorited posts
+        // Favorites: only favorited posts for THIS user
         console.log(`   🎯 Filter Mode: FAVORITES`);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.log('   ⚠️ No user found, cannot load favorites');
+          setPrevPostId(null);
+          setNextPostId(null);
+          return;
+        }
+
         const { data: favInteractions } = await supabase
           .from('post_interactions')
           .select('post_id')
+          .eq('user_id', user.id)
           .eq('is_favorited', true);
 
         const favPostIds = favInteractions?.map(i => i.post_id) || [];
-        console.log(`   ⭐ Found ${favPostIds.length} favorited posts`);
+        console.log(`   ⭐ Found ${favPostIds.length} favorited posts for user ${user.id}`);
         if (favPostIds.length > 0) {
           prevQuery = prevQuery.in('post_id', favPostIds);
           nextQuery = nextQuery.in('post_id', favPostIds);
@@ -237,11 +262,24 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
         postId: postId
       }));
 
+      // If no images but we have a cover image, use it as a placeholder
+      if (civitaiImages.length === 0 && post?.cover_image_url) {
+        civitaiImages.push({
+          id: 0, // Special ID to indicate this is just the cover
+          url: post.cover_image_url,
+          hash: '',
+          width: 0,
+          height: 0,
+          nsfw: false,
+          postId: postId
+        });
+      }
+
       // Set images immediately for fast display
       setImages(civitaiImages);
       setLoading(false);
 
-      // Always check API for updates (auto-sync)
+      // Auto-sync when DB has 0 images OR periodically check for updates
       console.log(`🔍 Checking Civitai API for updates to post ${postId}...`);
 
       // Do API check in background without blocking UI
@@ -251,9 +289,9 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
         const apiImageCount = apiData.items?.length || 0;
         console.log(`📡 API returned ${apiImageCount} images for post ${postId}`);
 
-        // If API has more images than database, sync the missing ones
-        if (apiImageCount > dbImageCount) {
-          console.log(`🔄 Found ${apiImageCount - dbImageCount} new images, auto-syncing...`);
+        // If API has images and (DB is empty OR API has more images), sync them
+        if (apiImageCount > 0 && (dbImageCount === 0 || apiImageCount > dbImageCount)) {
+          console.log(`🔄 Auto-syncing ${apiImageCount - dbImageCount} new images...`);
           const existingImageIds = new Set(imagesData?.map(img => img.image_id) || []);
           const newImages = apiData.items.filter((img: any) => !existingImageIds.has(img.id));
 
@@ -366,6 +404,9 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
 
       // Update local state
       setCoverImageUrl(image.url);
+
+      // Notify parent of cover image change
+      onCoverImageChange?.(image.url);
     } catch (err) {
       console.error('Error setting cover image:', err);
       alert('Failed to set cover image: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -795,10 +836,18 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
     );
   }
 
+
   if (images.length === 0) {
+    // No images and no cover image
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <div className="text-xl text-gray-600">No images found in this post</div>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-6 px-4">
+        <div className="text-center">
+          <div className="text-2xl font-semibold text-gray-800 mb-3">No images found</div>
+          <div className="text-gray-600 max-w-md">
+            This post has no images available.
+          </div>
+        </div>
+
         {onBack && (
           <button
             onClick={() => onBack(postId, images.length)}
@@ -900,10 +949,11 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
       }`}>
         {sortedImages.map((image, index) => {
           const isCover = image.url === coverImageUrl;
+          const isCoverOnly = image.id === 0; // Cover image placeholder when no real images
 
           return (
             <div
-              key={image.id}
+              key={image.id || `cover-${index}`}
               className={`transition-all duration-200 ease-in-out ${editMode ? 'cursor-move' : 'cursor-pointer'} ${
                 draggedIndex === index ? 'opacity-40 scale-95' : ''
               }`}
@@ -924,57 +974,69 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
               <div className={`bg-white rounded-lg shadow-md overflow-hidden transition-all duration-200 relative ${
                 editMode ? 'hover:shadow-xl' : 'hover:shadow-lg'
               }`}>
+                {/* Warning Badge for cover-only images */}
+                {isCoverOnly && (
+                  <div className="absolute top-2 right-2 bg-amber-500 text-white px-2 py-1 rounded-md text-xs font-semibold shadow-lg flex items-center gap-1 z-10">
+                    <Info size={14} />
+                    Cover only
+                  </div>
+                )}
                 <div
-                  className="w-full relative bg-gray-100"
+                  className="w-full relative bg-white"
                   style={{
                     aspectRatio: image.width && image.height ? `${image.width} / ${image.height}` : 'auto'
                   }}
                 >
-                  {(mediaTypes.get(image.id) || (image.url.endsWith('.mp4') ? 'video' : 'image')) === 'video' ? (
-                    <video
-                      src={image.url}
-                      className={`w-full h-full object-cover transition-opacity duration-300 ${
-                        loadedImages.has(image.id) ? 'opacity-100' : 'opacity-0'
-                      }`}
-                      controls
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      onLoadedData={(e) => {
-                        const video = e.target as HTMLVideoElement;
-                        setActualDimensions(prev => {
-                          const newMap = new Map(prev);
-                          newMap.set(image.id, { width: video.videoWidth, height: video.videoHeight });
-                          return newMap;
-                        });
-                        setLoadedImages(prev => new Set(prev).add(image.id));
-                      }}
-                      onError={() => {
-                        if (image.url.endsWith('.mp4')) {
-                          console.log(`Video failed for image ${image.id}, falling back to image`);
-                          setMediaTypes(prev => new Map(prev).set(image.id, 'image'));
-                        }
-                      }}
-                    />
+                  {index < allowedToLoadCount ? (
+                    // Only load images up to the allowed count
+                    (mediaTypes.get(image.id) || (image.url.endsWith('.mp4') ? 'video' : 'image')) === 'video' ? (
+                      <video
+                        src={ensureHttps(image.url)}
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${
+                          loadedImages.has(image.id) ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        controls
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        onLoadedData={(e) => {
+                          const video = e.target as HTMLVideoElement;
+                          setActualDimensions(prev => {
+                            const newMap = new Map(prev);
+                            newMap.set(image.id, { width: video.videoWidth, height: video.videoHeight });
+                            return newMap;
+                          });
+                          setLoadedImages(prev => new Set(prev).add(image.id));
+                        }}
+                        onError={() => {
+                          if (image.url.endsWith('.mp4')) {
+                            console.log(`Video failed for image ${image.id}, falling back to image`);
+                            setMediaTypes(prev => new Map(prev).set(image.id, 'image'));
+                          }
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src={ensureHttps(image.url)}
+                        alt={`Image ${index + 1} from post ${postId}`}
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${
+                          loadedImages.has(image.id) ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        onLoad={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          setActualDimensions(prev => {
+                            const newMap = new Map(prev);
+                            newMap.set(image.id, { width: img.naturalWidth, height: img.naturalHeight });
+                            return newMap;
+                          });
+                          setLoadedImages(prev => new Set(prev).add(image.id));
+                        }}
+                      />
+                    )
                   ) : (
-                    <img
-                      src={image.url}
-                      alt={`Image ${index + 1} from post ${postId}`}
-                      className={`w-full h-full object-cover transition-opacity duration-300 ${
-                        loadedImages.has(image.id) ? 'opacity-100' : 'opacity-0'
-                      }`}
-                      loading="lazy"
-                      onLoad={(e) => {
-                        const img = e.target as HTMLImageElement;
-                        setActualDimensions(prev => {
-                          const newMap = new Map(prev);
-                          newMap.set(image.id, { width: img.naturalWidth, height: img.naturalHeight });
-                          return newMap;
-                        });
-                        setLoadedImages(prev => new Set(prev).add(image.id));
-                      }}
-                    />
+                    // Placeholder for images not yet allowed to load
+                    <div className="w-full h-full bg-white" />
                   )}
                 </div>
                 <div className="p-3">

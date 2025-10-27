@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase, Creator, extractUsernameFromUrl } from '../lib/supabase';
 import { Plus, Users, FileText, Image as ImageIcon, Heart, Star, Pencil, Check, X, Eraser } from 'lucide-react';
+import { getStoredProfiles, saveProfile, removeProfile, getCurrentProfileEmail, type StoredProfile } from '../lib/profiles';
 
 interface SettingsProps {
   onCreatorClick?: (username: string) => void;
   onViewHidden?: () => void;
+  onViewUnclaimed?: () => void;
   onNSFWToggle?: () => void;
 }
 
-export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: SettingsProps) => {
+export const Settings = ({ onCreatorClick, onViewHidden, onViewUnclaimed, onNSFWToggle }: SettingsProps) => {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +27,9 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [userEmail, setUserEmail] = useState('');
   const [showNSFW, setShowNSFW] = useState(true);
+  const [storedProfiles, setStoredProfiles] = useState<StoredProfile[]>([]);
+  const [editingProfile, setEditingProfile] = useState<string | null>(null);
+  const [tempNickname, setTempNickname] = useState('');
 
   // console.log(`🔄 Settings rendering with ${creators.length} creators:`, creators.map(c => c.username));
 
@@ -34,13 +39,36 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
     fetchDashboardStats();
     fetchUserProfile();
     fetchNSFWPreference();
+    loadStoredProfiles();
 
-    // Poll for sync status updates every 5 seconds
+    // Poll for sync status and dashboard stats every 5 seconds
     const interval = setInterval(() => {
       checkSyncStatus();
+      fetchDashboardStats(); // Also refresh stats to catch extension updates
     }, 5000);
 
-    return () => clearInterval(interval);
+    // Listen for sync completion from App.tsx
+    const handleSyncCompleted = () => {
+      console.log('🔄 Sync completed, refreshing dashboard stats...');
+      fetchDashboardStats();
+      fetchCreators();
+    };
+
+    // Listen for posts added via browser extension
+    const handlePostsAdded = () => {
+      console.log('📝 Posts added via extension, refreshing dashboard stats...');
+      fetchDashboardStats();
+      fetchCreators();
+    };
+
+    window.addEventListener('syncCompleted', handleSyncCompleted);
+    window.addEventListener('postsAdded', handlePostsAdded);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('syncCompleted', handleSyncCompleted);
+      window.removeEventListener('postsAdded', handlePostsAdded);
+    };
   }, []);
 
   async function checkSyncStatus() {
@@ -151,30 +179,23 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
         return;
       }
 
-      // Get total posts from my creators
+      // Get total posts from my creators (only posts with cover images - displayable posts)
       const { count: postsCount } = await supabase
         .from('posts')
         .select('*', { count: 'exact', head: true })
-        .in('creator_username', creatorUsernames);
+        .in('creator_username', creatorUsernames)
+        .not('cover_image_url', 'is', null); // Only count displayable posts
       setTotalPosts(postsCount || 0);
 
-      // Get total images from my creators' posts
-      const { data: myPosts } = await supabase
-        .from('posts')
-        .select('post_id')
-        .in('creator_username', creatorUsernames);
+      // Get total images - count directly from images table filtering by creator
+      // This is more efficient than getting all post IDs first
+      const { count: imagesCount } = await supabase
+        .from('images')
+        .select('image_id, posts!inner(creator_username, cover_image_url)', { count: 'exact', head: true })
+        .in('posts.creator_username', creatorUsernames)
+        .not('posts.cover_image_url', 'is', null);
 
-      const postIds = myPosts?.map(p => p.post_id) || [];
-
-      if (postIds.length > 0) {
-        const { count: imagesCount } = await supabase
-          .from('images')
-          .select('*', { count: 'exact', head: true })
-          .in('post_id', postIds);
-        setTotalImages(imagesCount || 0);
-      } else {
-        setTotalImages(0);
-      }
+      setTotalImages(imagesCount || 0);
 
       // Get my favorites count
       const { count: favCount } = await supabase
@@ -206,27 +227,32 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
 
       if (error) throw error;
 
-      console.log(`📋 Fetched ${data?.length || 0} creators from database`);
+      // Get post counts for each creator with individual count queries (bypasses 1000 row limit)
+      const countPromises = (data || []).map(async (creator) => {
+        const { count } = await supabase
+          .from('posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('creator_username', creator.username)
+          .not('cover_image_url', 'is', null);
 
-      // Get actual post counts from database for each creator (only posts with cover images)
-      const creatorsWithCounts = await Promise.all(
-        (data || []).map(async (creator) => {
-          const { count } = await supabase
-            .from('posts')
-            .select('*', { count: 'exact', head: true })
-            .eq('creator_username', creator.username)
-            .not('cover_image_url', 'is', null); // Only count displayable posts
+        return { username: creator.username, count: count || 0 };
+      });
 
-          console.log(`📊 ${creator.username}: displayable_posts=${count}, total_posts=${creator.total_posts}, sync_status=${creator.sync_status}`);
+      const counts = await Promise.all(countPromises);
 
-          return {
-            ...creator,
-            actual_post_count: count || 0
-          };
-        })
-      );
+      // Create map of username -> count
+      const countMap = new Map<string, number>();
+      counts.forEach(({ username, count }) => {
+        countMap.set(username, count);
+      });
 
-      console.log(`✅ Setting ${creatorsWithCounts.length} creators in state:`, creatorsWithCounts.map(c => c.username));
+      const creatorsWithCounts = (data || []).map(creator => {
+        const count = countMap.get(creator.username) || 0;
+        return {
+          ...creator,
+          actual_post_count: count
+        };
+      });
       setCreators(creatorsWithCounts);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -262,30 +288,53 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
         throw new Error('Username can only contain letters, numbers, underscores, and hyphens');
       }
 
-      // Check if already exists for this user
-      const { data: existing } = await supabase
+      // Check if creator exists for this user
+      const { data: existingForUser } = await supabase
         .from('creators')
         .select('username')
         .eq('username', username)
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (existing) {
+      if (existingForUser) {
         throw new Error(`Creator "${username}" is already in your list`);
       }
 
-      // Insert creator with user_id
-      const { error: insertError } = await supabase
+      // Check if creator exists without a user_id (from browser extension)
+      const { data: orphanedCreator } = await supabase
         .from('creators')
-        .insert({
-          username,
-          user_id: user.id
-        });
+        .select('id, username')
+        .eq('username', username)
+        .is('user_id', null)
+        .maybeSingle();
 
-      if (insertError) throw insertError;
+      if (orphanedCreator) {
+        // Update the orphaned creator to belong to this user
+        console.log(`📝 Claiming orphaned creator: ${username}`);
+        const { error: updateError } = await supabase
+          .from('creators')
+          .update({ user_id: user.id })
+          .eq('id', orphanedCreator.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Insert new creator with user_id
+        const { error: insertError } = await supabase
+          .from('creators')
+          .insert({
+            username,
+            user_id: user.id
+          });
+
+        if (insertError) throw insertError;
+      }
 
       // Refresh list
       await fetchCreators();
+
+      // Trigger background sync for the new creator
+      console.log('🔄 Triggering sync for new creator...');
+      window.dispatchEvent(new Event('triggerSync'));
 
       // Reset form
       setNewCreatorUsername('');
@@ -420,6 +469,39 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
     }
   }
 
+  function loadStoredProfiles() {
+    const profiles = getStoredProfiles();
+    setStoredProfiles(profiles);
+  }
+
+  function handleEditNickname(email: string) {
+    const profile = storedProfiles.find(p => p.email === email);
+    setEditingProfile(email);
+    setTempNickname(profile?.nickname || '');
+  }
+
+  function handleCancelEditNickname() {
+    setEditingProfile(null);
+    setTempNickname('');
+  }
+
+  function handleSaveNickname(email: string, password: string) {
+    saveProfile({ email, password, nickname: tempNickname });
+    setEditingProfile(null);
+    setTempNickname('');
+    loadStoredProfiles();
+    // Notify Navigation component to refresh profiles
+    window.dispatchEvent(new Event('profilesUpdated'));
+  }
+
+  function handleRemoveProfile(email: string) {
+    if (!confirm(`Remove profile "${email}"?`)) return;
+    removeProfile(email);
+    loadStoredProfiles();
+    // Notify Navigation component to refresh profiles
+    window.dispatchEvent(new Event('profilesUpdated'));
+  }
+
   async function handleLogout() {
     try {
       await supabase.auth.signOut();
@@ -451,9 +533,23 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
       // Start sync in background
       const { syncCreator } = await import('../lib/sync');
 
-      // Use progress callback to log updates
-      syncCreator(username, (progress) => {
+      // Use progress callback to log updates and update UI
+      syncCreator(username, async (progress) => {
         console.log(`📊 Sync progress for ${username}: ${progress.totalPosts} posts, ${progress.totalImages} images (page ${progress.currentPage})`);
+
+        // Query for displayable posts count (with cover images)
+        const { count } = await supabase
+          .from('posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('creator_username', username)
+          .not('cover_image_url', 'is', null);
+
+        // Update the creator's post count in real-time
+        setCreators(prev => prev.map(c =>
+          c.username === username
+            ? { ...c, actual_post_count: count || 0, total_posts: progress.totalPosts }
+            : c
+        ));
       }, { fullBackfill: true, userId: user.id }).then(async () => {
         console.log(`✅ Sync completed for ${username}`);
         // Refresh stats when done
@@ -738,7 +834,7 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
                 <div className="flex justify-start">
                   <div className="bg-gray-900 text-white px-4 py-2 rounded-full flex items-center">
                     <span className="text-sm font-semibold tracking-tight leading-none">
-                      {creator.actual_post_count || creator.total_posts || 0}
+                      {creator.actual_post_count || 0}
                     </span>
                   </div>
                 </div>
@@ -836,6 +932,61 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
         </>
       )}
 
+      {/* Content Preferences */}
+      <div className="flex items-center justify-between mb-4 mt-8">
+        <h2 className="text-2xl font-bold text-gray-900">Content Preferences</h2>
+      </div>
+
+      <div className="space-y-2">
+        <div className="grid grid-cols-4 items-center gap-4 py-3 px-4 bg-white rounded-lg shadow-sm">
+          <div className="col-span-3">
+            <span className="text-base font-medium text-gray-900">Show NSFW Content</span>
+          </div>
+          <div className="flex items-center justify-end">
+            <button
+              onClick={handleToggleNSFW}
+              className={`relative inline-flex h-[26px] w-[58px] items-center p-1 rounded transition-colors ${
+                showNSFW ? 'bg-red-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`h-[18px] w-[24px] rounded-sm bg-white transition-transform ${
+                  showNSFW ? 'translate-x-[26px]' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 items-center gap-4 py-3 px-4 bg-white rounded-lg shadow-sm">
+          <div className="col-span-3">
+            <span className="text-base font-medium text-gray-900">View Hidden Posts</span>
+          </div>
+          <div className="flex items-center justify-end">
+            <button
+              onClick={onViewHidden}
+              className="w-[58px] h-[26px] bg-gray-900 text-white text-sm rounded hover:bg-gray-800 transition-colors"
+            >
+              View
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 items-center gap-4 py-3 px-4 bg-white rounded-lg shadow-sm">
+          <div className="col-span-3">
+            <span className="text-base font-medium text-gray-900">View Scraped Posts</span>
+          </div>
+          <div className="flex items-center justify-end">
+            <button
+              onClick={onViewUnclaimed}
+              className="w-[58px] h-[26px] bg-gray-900 text-white text-sm rounded hover:bg-gray-800 transition-colors"
+            >
+              View
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* My Username Section */}
       <div className="flex items-center justify-between mb-4 mt-8">
         <h2 className="text-2xl font-bold text-gray-900">My Username</h2>
@@ -894,45 +1045,105 @@ export const Settings = ({ onCreatorClick, onViewHidden, onNSFWToggle }: Setting
         </div>
       </div>
 
-      {/* NSFW Toggle */}
+      {/* Profile Management */}
       <div className="flex items-center justify-between mb-4 mt-8">
-        <h2 className="text-2xl font-bold text-gray-900">Content Preferences</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Saved Profiles</h2>
       </div>
 
-      <div className="space-y-2">
-        <div className="grid grid-cols-4 items-center gap-4 py-3 px-4 bg-white rounded-lg shadow-sm">
-          <div className="col-span-3">
-            <span className="text-base font-medium text-gray-900">Show NSFW Content</span>
+      <div className="space-y-2 mb-8">
+        {storedProfiles.length === 0 ? (
+          <div className="text-center text-gray-600 py-4 bg-white rounded-lg shadow-sm">
+            No saved profiles yet. Login to save your profile.
           </div>
-          <div className="flex items-center justify-end">
-            <button
-              onClick={handleToggleNSFW}
-              className={`relative inline-flex h-[26px] w-[58px] items-center p-1 rounded transition-colors ${
-                showNSFW ? 'bg-red-600' : 'bg-gray-300'
-              }`}
-            >
-              <span
-                className={`h-[18px] w-[24px] rounded-sm bg-white transition-transform ${
-                  showNSFW ? 'translate-x-[26px]' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
+        ) : (
+          storedProfiles.map((profile) => {
+            const isCurrent = profile.email === userEmail;
+            const isEditing = editingProfile === profile.email;
 
-        <div className="grid grid-cols-4 items-center gap-4 py-3 px-4 bg-white rounded-lg shadow-sm">
-          <div className="col-span-3">
-            <span className="text-base font-medium text-gray-900">View Hidden Posts</span>
-          </div>
-          <div className="flex items-center justify-end">
-            <button
-              onClick={onViewHidden}
-              className="w-[58px] h-[26px] bg-gray-900 text-white text-sm rounded hover:bg-gray-800 transition-colors"
-            >
-              View
-            </button>
-          </div>
-        </div>
+            return (
+              <div key={profile.email} className="grid grid-cols-3 sm:grid-cols-4 items-center gap-4 py-3 px-4 bg-white rounded-lg shadow-sm">
+                <div className="flex items-center gap-2 min-w-0 col-span-2 sm:col-span-1">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={tempNickname}
+                      onChange={(e) => setTempNickname(e.target.value)}
+                      placeholder="Nickname (optional)"
+                      className="w-full text-base font-medium text-gray-900 border-b border-red-600 focus:outline-none bg-transparent"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveNickname(profile.email, profile.password);
+                        if (e.key === 'Escape') handleCancelEditNickname();
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base font-medium text-gray-900 truncate">
+                        {profile.nickname || profile.email}
+                      </span>
+                      {isCurrent && (
+                        <Star className="w-4 h-4 text-red-600 fill-red-600 flex-shrink-0" strokeWidth={0} />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="hidden sm:block text-sm text-gray-500 truncate">
+                  {profile.nickname ? profile.email : ''}
+                </div>
+                <div className="hidden sm:block"></div>
+                <div className="flex items-center gap-2 justify-end">
+                  {isEditing ? (
+                    <>
+                      <button
+                        onClick={handleCancelEditNickname}
+                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        title="Cancel"
+                      >
+                        <X className="w-5 h-5 text-red-600" />
+                      </button>
+                      <button
+                        onClick={() => handleSaveNickname(profile.email, profile.password)}
+                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        title="Save"
+                      >
+                        <Check className="w-5 h-5 text-green-600" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleEditNickname(profile.email)}
+                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        title="Edit nickname"
+                      >
+                        <Pencil className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleRemoveProfile(profile.email)}
+                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        title="Remove profile"
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Logout Button */}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { CivitaiImage } from '../lib/civitai';
 import { Play, Square, Settings, Plus, Minus } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureHttps } from '../lib/supabase';
 import { useSwipeable } from 'react-swipeable';
 
 interface SlideshowProps {
@@ -386,7 +386,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
       {isCurrentVideo ? (
         <video
           ref={imageRef as any}
-          src={displayImage.url}
+          src={ensureHttps(displayImage.url)}
           className="w-full h-full cursor-pointer select-none object-contain"
           style={{
             ...(isZoomed
@@ -416,7 +416,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
       ) : (
         <img
           ref={imageRef}
-          src={displayImage.url}
+          src={ensureHttps(displayImage.url)}
           alt={`Image ${displayIndex + 1} of ${images.length}`}
           className="w-full h-full cursor-pointer select-none object-contain"
           style={{
@@ -447,7 +447,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
       {isTransitioning && currentIndex !== displayIndex && (
         isVideo(currentImage.url) ? (
           <video
-            src={currentImage.url}
+            src={ensureHttps(currentImage.url)}
             className="absolute inset-0 w-full h-full select-none object-contain transition-opacity duration-200"
             style={{
               pointerEvents: 'none',
@@ -460,7 +460,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
           />
         ) : (
           <img
-            src={currentImage.url}
+            src={ensureHttps(currentImage.url)}
             alt={`Image ${currentIndex + 1} of ${images.length}`}
             className="absolute inset-0 w-full h-full select-none object-contain transition-opacity duration-200"
             style={{

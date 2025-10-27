@@ -14,7 +14,7 @@ interface Post {
   is_favorited?: boolean;
 }
 
-interface HiddenPostsProps {
+interface UnclaimedPostsProps {
   onPostClick?: (postId: number) => void;
   onCreatorClick?: (username: string) => void;
 }
@@ -24,10 +24,11 @@ interface PostCardProps {
   onPostClick?: (postId: number) => void;
   onCreatorClick?: (username: string) => void;
   onToggleFavorite: (postId: number, currentState: boolean, e: React.MouseEvent) => void;
-  onToggleUnhide: (postId: number, e: React.MouseEvent) => void;
+  onAddToMisc: (creatorUsername: string, postId: number, e: React.MouseEvent) => void;
+  isAdding: boolean;
 }
 
-const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggleUnhide }: PostCardProps) => {
+const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onAddToMisc, isAdding }: PostCardProps) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [mediaType, setMediaType] = useState<'video' | 'image'>(
     post.cover_image_url.endsWith('.mp4') ? 'video' : 'image'
@@ -158,11 +159,12 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
               </svg>
             </a>
 
-            {/* Unhide (Eye icon without slash) */}
+            {/* Add to Miscellaneous (Plus icon) */}
             <button
-              onClick={(e) => onToggleUnhide(post.post_id, e)}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
-              title="Unhide post"
+              onClick={(e) => onAddToMisc(post.creator_username, post.post_id, e)}
+              disabled={isAdding}
+              className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+              title="Add to Miscellaneous"
             >
               <svg
                 className="w-5 h-5"
@@ -174,12 +176,7 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                  d="M12 4v16m8-8H4"
                 />
               </svg>
             </button>
@@ -190,74 +187,96 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
   );
 };
 
-export function HiddenPosts({ onPostClick, onCreatorClick }: HiddenPostsProps) {
+export function UnclaimedPosts({ onPostClick, onCreatorClick }: UnclaimedPostsProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addingToMisc, setAddingToMisc] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchHiddenPosts();
+    fetchUnclaimedPosts();
   }, []);
 
-  async function fetchHiddenPosts() {
+  async function fetchUnclaimedPosts() {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
 
-      // Get hidden post IDs
-      const { data: hiddenInteractions } = await supabase
-        .from('post_interactions')
-        .select('post_id, is_favorited')
-        .eq('user_id', user.id)
-        .eq('is_hidden', true);
+      // Get unclaimed posts (posts from creators with null user_id)
+      const { data: unclaimedCreators } = await supabase
+        .from('creators')
+        .select('username')
+        .is('user_id', null);
 
-      if (!hiddenInteractions || hiddenInteractions.length === 0) {
+      if (!unclaimedCreators || unclaimedCreators.length === 0) {
         setPosts([]);
         setLoading(false);
         return;
       }
 
-      const hiddenPostIds = hiddenInteractions.map(i => i.post_id);
-      const favoriteMap = new Map(hiddenInteractions.map(i => [i.post_id, i.is_favorited]));
+      const unclaimedUsernames = unclaimedCreators.map(c => c.username);
 
-      // Get the posts
-      const { data: hiddenPosts } = await supabase
+      // Get posts from these creators
+      const { data: unclaimedPosts } = await supabase
         .from('posts')
         .select('post_id, creator_username, cover_image_url, cover_width, cover_height, image_count, nsfw, published_at')
-        .in('post_id', hiddenPostIds)
+        .in('creator_username', unclaimedUsernames)
         .order('post_id', { ascending: false });
 
-      const postsWithFavorites = (hiddenPosts || []).map(post => ({
+      // Get favorite status if user is logged in
+      let favoriteMap = new Map();
+      if (user && unclaimedPosts && unclaimedPosts.length > 0) {
+        const postIds = unclaimedPosts.map(p => p.post_id);
+        const { data: interactions } = await supabase
+          .from('post_interactions')
+          .select('post_id, is_favorited')
+          .eq('user_id', user.id)
+          .in('post_id', postIds);
+
+        favoriteMap = new Map(interactions?.map(i => [i.post_id, i.is_favorited]) || []);
+      }
+
+      const postsWithFavorites = (unclaimedPosts || []).map(post => ({
         ...post,
         is_favorited: favoriteMap.get(post.post_id) || false
       }));
 
       setPosts(postsWithFavorites);
     } catch (err) {
-      console.error('Error fetching hidden posts:', err);
+      console.error('Error fetching unclaimed posts:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleUnhide(postId: number, e: React.MouseEvent) {
+  async function handleAddToMiscellaneous(creatorUsername: string, postId: number, e: React.MouseEvent) {
     e.stopPropagation();
 
     try {
+      setAddingToMisc(postId);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) throw new Error('Not logged in');
 
-      // Remove from list immediately
-      setPosts(posts.filter(p => p.post_id !== postId));
+      // Claim the creator by updating their user_id
+      const { error: claimError } = await supabase
+        .from('creators')
+        .update({ user_id: user.id })
+        .eq('username', creatorUsername)
+        .is('user_id', null);
 
-      await supabase
-        .from('post_interactions')
-        .update({ is_hidden: false, updated_at: new Date().toISOString() })
-        .eq('post_id', postId)
-        .eq('user_id', user.id);
+      if (claimError) throw claimError;
+
+      // Remove from list
+      setPosts(posts.filter(p => p.creator_username !== creatorUsername));
+
+      // Dispatch event to refresh Settings page
+      window.dispatchEvent(new Event('postsAdded'));
+
+      alert(`Added ${creatorUsername} to your creators`);
     } catch (err) {
-      console.error('Error unhiding post:', err);
-      fetchHiddenPosts();
+      console.error('Error claiming creator:', err);
+      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setAddingToMisc(null);
     }
   }
 
@@ -296,14 +315,14 @@ export function HiddenPosts({ onPostClick, onCreatorClick }: HiddenPostsProps) {
       }
     } catch (err) {
       console.error('Error favoriting post:', err);
-      fetchHiddenPosts();
+      fetchUnclaimedPosts();
     }
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl text-gray-600">Loading hidden posts...</div>
+        <div className="text-xl text-gray-600">Loading unclaimed posts...</div>
       </div>
     );
   }
@@ -318,13 +337,14 @@ export function HiddenPosts({ onPostClick, onCreatorClick }: HiddenPostsProps) {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900">Hidden Posts</h1>
+        <h1 className="text-4xl font-bold text-gray-900">Unclaimed Posts</h1>
+        <p className="text-sm text-gray-600 mt-2">Posts from creators not yet added to your account</p>
       </div>
 
       {posts.length === 0 ? (
         <div className="text-center text-gray-600 py-16">
-          <p className="text-xl">No hidden posts</p>
-          <p className="text-sm mt-2">Posts you hide will appear here</p>
+          <p className="text-xl">No unclaimed posts</p>
+          <p className="text-sm mt-2">Posts from unclaimed creators will appear here</p>
         </div>
       ) : (
         <Masonry
@@ -339,14 +359,15 @@ export function HiddenPosts({ onPostClick, onCreatorClick }: HiddenPostsProps) {
               onPostClick={onPostClick}
               onCreatorClick={onCreatorClick}
               onToggleFavorite={toggleFavorite}
-              onToggleUnhide={handleUnhide}
+              onAddToMisc={handleAddToMiscellaneous}
+              isAdding={addingToMisc === post.post_id}
             />
           ))}
         </Masonry>
       )}
 
       <div className="mt-8 mb-24 text-center text-gray-600">
-        {posts.length} hidden post{posts.length !== 1 ? 's' : ''}
+        {posts.length} unclaimed post{posts.length !== 1 ? 's' : ''}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureHttps } from '../lib/supabase';
 
 interface ImageData {
   id: number;
@@ -79,7 +79,7 @@ export const ImageGrid = () => {
           >
             <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
               <img
-                src={item.image_url}
+                src={ensureHttps(item.image_url)}
                 alt={`Image from ${item.posts?.post_url}`}
                 className="w-full h-auto"
                 loading="lazy"

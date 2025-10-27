@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, getUserNSFWPreference } from '../lib/supabase';
+import { supabase, getUserNSFWPreference, ensureHttps } from '../lib/supabase';
 import Masonry from 'react-masonry-css';
 import { ArrowUp } from 'lucide-react';
 
@@ -18,7 +18,8 @@ interface FeedProps {
   onPostClick?: (postId: number) => void;
   onCreatorClick?: (username: string) => void;
   refreshTrigger?: number;
-  updatedPostImageCount?: { postId: number; imageCount: number } | null;
+  updatedPostData?: { postId: number; imageCount?: number; coverImageUrl?: string } | null;
+  onPostInteractionChange?: () => void;
 }
 
 interface PostCardProps {
@@ -63,19 +64,15 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
 
         {/* Image or Video */}
         <div
-          className="cursor-pointer relative bg-gray-100"
+          className="cursor-pointer relative bg-white"
           style={post.coverWidth && post.coverHeight ? { aspectRatio: `${post.coverWidth} / ${post.coverHeight}` } : undefined}
           onClick={() => onPostClick?.(post.postId)}
         >
-          {/* Loading skeleton */}
-          {!imageLoaded && (
-            <div className="absolute inset-0 bg-gray-200 animate-pulse" />
-          )}
 
           {post.coverImageUrl ? (
             mediaType === 'video' ? (
               <video
-                src={post.coverImageUrl}
+                src={ensureHttps(post.coverImageUrl)}
                 className="w-full h-auto relative z-10"
                 style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
                 autoPlay
@@ -87,12 +84,11 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
               />
             ) : (
               <img
-                src={post.coverImageUrl}
+                src={ensureHttps(post.coverImageUrl)}
                 alt={`Post ${post.postId} by ${post.username}`}
                 className="w-full h-auto relative z-10"
                 style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
                 onLoad={() => setImageLoaded(true)}
-                loading="lazy"
               />
             )
           ) : (
@@ -192,7 +188,7 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
   );
 };
 
-export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostImageCount }: FeedProps) => {
+export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostData, onPostInteractionChange }: FeedProps) => {
   const [posts, setPosts] = useState<PostPreview[]>([]);
   const [displayedPosts, setDisplayedPosts] = useState<PostPreview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,23 +200,24 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
   const [offset, setOffset] = useState(0);
   const [totalCount, setTotalCount] = useState<number | null>(null);
 
-  // Update post image count when returning from post detail
+  // Update post data when returning from post detail
   useEffect(() => {
-    if (updatedPostImageCount) {
-      console.log(`📝 Feed received updatedPostImageCount:`, updatedPostImageCount);
-      setPosts(prevPosts => {
-        const updated = prevPosts.map(post =>
-          post.postId === updatedPostImageCount.postId
-            ? { ...post, imageCount: updatedPostImageCount.imageCount }
+    if (updatedPostData) {
+      setPosts(prevPosts =>
+        prevPosts.map(post =>
+          post.postId === updatedPostData.postId
+            ? {
+                ...post,
+                ...(updatedPostData.imageCount !== undefined && { imageCount: updatedPostData.imageCount }),
+                ...(updatedPostData.coverImageUrl !== undefined && { coverImageUrl: updatedPostData.coverImageUrl })
+              }
             : post
-        );
-        const targetPost = updated.find(p => p.postId === updatedPostImageCount.postId);
-        console.log(`📝 Updated post ${updatedPostImageCount.postId} count to ${targetPost?.imageCount}`);
-        return updated;
-      });
+        )
+      );
     }
-  }, [updatedPostImageCount]);
-  const POSTS_PER_PAGE = 50;
+  }, [updatedPostData]);
+  const POSTS_PER_PAGE = 30;
+  const INITIAL_POSTS = 30; // Start with fewer posts for faster initial load
 
   useEffect(() => {
     // Only fetch if we don't have posts yet
@@ -236,9 +233,12 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
     }
   }, [refreshTrigger]);
 
+
   useEffect(() => {
     // Update displayed posts when page changes
-    setDisplayedPosts(posts.slice(0, page * POSTS_PER_PAGE));
+    // Use INITIAL_POSTS for first page, then POSTS_PER_PAGE for subsequent pages
+    const displayCount = page === 1 ? INITIAL_POSTS : INITIAL_POSTS + (page - 1) * POSTS_PER_PAGE;
+    setDisplayedPosts(posts.slice(0, displayCount));
   }, [posts, page]);
 
   useEffect(() => {
@@ -247,9 +247,12 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
       // Show back-to-top button after scrolling 800px
       setShowBackToTop(window.scrollY > 800);
 
-      // Infinite scroll: load more posts near bottom
-      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500) {
-        if (page * POSTS_PER_PAGE < posts.length) {
+      // Infinite scroll: load more posts near bottom (increased threshold for fast scrolling)
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2000) {
+        // Calculate how many posts we're currently displaying
+        const currentDisplayCount = page === 1 ? INITIAL_POSTS : INITIAL_POSTS + (page - 1) * POSTS_PER_PAGE;
+
+        if (currentDisplayCount < posts.length) {
           setPage(prev => prev + 1);
         } else if (hasMore && !loadingMore) {
           // Load more from database when we've displayed all fetched posts
@@ -258,7 +261,7 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, [page, posts.length, hasMore, loadingMore]);
 
@@ -369,7 +372,7 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
 
       query = query
         .order('post_id', { ascending: false }) // Sort by post_id (higher = newer)
-        .limit(50); // Start with 50 posts, load more on scroll
+        .limit(30); // Start with 30 posts, load more on scroll
 
       // Exclude my posts if username is set
       if (myUsername) {
@@ -420,8 +423,8 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
 
       console.log('✅ Setting posts:', visiblePosts.length);
       setPosts(visiblePosts);
-      setOffset(50); // Set offset for next fetch
-      setHasMore(postsData.length === 50); // If we got fewer than 50 from DB, no more to load
+      setOffset(30); // Set offset for next fetch
+      setHasMore(postsData.length === 30); // If we got fewer than 30 from DB, no more to load
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -477,7 +480,7 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
 
       query = query
         .order('post_id', { ascending: false })
-        .range(offset, offset + 49); // Fetch next 50 posts
+        .range(offset, offset + 29); // Fetch next 30 posts
 
       if (myUsername) {
         query = query.neq('creator_username', myUsername);
@@ -522,10 +525,14 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
       // Filter out hidden posts
       const visibleNewPosts = newPosts.filter(p => !p.isHidden);
 
-      // Append to existing posts
-      setPosts(prev => [...prev, ...visibleNewPosts]);
-      setOffset(prev => prev + 50);
-      setHasMore(postsData.length === 50); // If we got fewer than 50, no more to load
+      // Append to existing posts, avoiding duplicates
+      setPosts(prev => {
+        const existingIds = new Set(prev.map(p => p.postId));
+        const uniqueNewPosts = visibleNewPosts.filter(p => !existingIds.has(p.postId));
+        return [...prev, ...uniqueNewPosts];
+      });
+      setOffset(prev => prev + 30);
+      setHasMore(postsData.length === 30); // If we got fewer than 30, no more to load
     } catch (err) {
       console.error('Error loading more posts:', err);
     } finally {
@@ -602,6 +609,9 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
           .from('post_interactions')
           .insert({ post_id: postId, is_favorited: newState, user_id: user.id });
       }
+
+      // Notify parent to refresh other feeds
+      onPostInteractionChange?.();
     } catch (err) {
       console.error('Error favoriting post:', err);
       // Revert on error
@@ -658,11 +668,8 @@ export const Feed = ({ onPostClick, onCreatorClick, refreshTrigger, updatedPostI
           />
         ))}
       </Masonry>
-      <div className="mt-8 text-center text-gray-600">
+      <div className="mt-8 mb-24 text-center text-gray-600">
         Showing {displayedPosts.length} of {totalCount !== null ? totalCount : posts.length} {(totalCount !== null ? totalCount : posts.length) === 1 ? 'post' : 'posts'}
-        {hasMore && (
-          <div className="mt-4 text-sm text-gray-500">Scroll down to load more...</div>
-        )}
         {loadingMore && (
           <div className="mt-4 text-sm text-gray-500">Loading more posts...</div>
         )}

@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { initCustomAlerts } from './lib/customAlerts'
+
+// Initialize custom alert/confirm dialogs
+initCustomAlerts()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
