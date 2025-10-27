@@ -153,6 +153,13 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   const goToNext = () => {
     if (isTransitioning) return;
 
+    // If only 1 image in post (e.g., cover-only), always advance to next post
+    if (images.length === 1) {
+      console.log(`➡️ Single image post - advancing to next post`);
+      onNavigateNext();
+      return;
+    }
+
     // Check if we're at the last image and should advance to next post
     if (!loopPost && currentIndex === images.length - 1) {
       onNavigateNext();
@@ -188,6 +195,15 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   const goToPrevious = () => {
     console.log(`⬅️ goToPrevious called - currentIndex: ${currentIndex}, loopPost: ${loopPost}, isTransitioning: ${isTransitioning}`);
     if (isTransitioning) return;
+
+    // If only 1 image in post (e.g., cover-only), always advance to previous post
+    if (images.length === 1) {
+      console.log(`⬅️ Single image post - advancing to previous post`);
+      if (onNavigatePrevious) {
+        onNavigatePrevious();
+      }
+      return;
+    }
 
     // Check if we're at the first image and should navigate to previous post
     if (!loopPost && currentIndex === 0) {
