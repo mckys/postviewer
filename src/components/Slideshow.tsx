@@ -399,7 +399,7 @@ export const Slideshow = ({ images, startIndex, onClose, onNavigateNext, onNavig
   });
 
   // Pinch-to-zoom gesture handlers
-  const getTouchDistance = (touches: TouchList): number => {
+  const getTouchDistance = (touches: React.TouchList): number => {
     if (touches.length < 2) return 0;
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
