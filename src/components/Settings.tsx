@@ -41,12 +41,6 @@ export const Settings = ({ onCreatorClick, onViewHidden, onViewUnclaimed, onNSFW
     fetchNSFWPreference();
     loadStoredProfiles();
 
-    // Poll for sync status and dashboard stats every 5 seconds
-    const interval = setInterval(() => {
-      checkSyncStatus();
-      fetchDashboardStats(); // Also refresh stats to catch extension updates
-    }, 5000);
-
     // Listen for sync completion from App.tsx
     const handleSyncCompleted = () => {
       console.log('🔄 Sync completed, refreshing dashboard stats...');
@@ -65,7 +59,6 @@ export const Settings = ({ onCreatorClick, onViewHidden, onViewUnclaimed, onNSFW
     window.addEventListener('postsAdded', handlePostsAdded);
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener('syncCompleted', handleSyncCompleted);
       window.removeEventListener('postsAdded', handlePostsAdded);
     };

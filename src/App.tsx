@@ -98,10 +98,12 @@ function App() {
   // Background sync - check for stale creators and sync them
   const startBackgroundSync = async () => {
     try {
+      console.log('🔍 Checking if sync is needed...');
       const { needsSync, syncAllCreators } = await import('./lib/sync');
 
       // Check if any creators need syncing
       const shouldSync = await needsSync();
+      console.log(`   needsSync returned: ${shouldSync}`);
 
       if (shouldSync) {
         console.log('🔄 Starting background sync for stale creators...');
@@ -122,7 +124,7 @@ function App() {
           console.error('❌ Background sync failed:', err);
         });
       } else {
-        console.log('✅ All creators are up to date');
+        console.log('✅ All creators are up to date (synced within last 24 hours)');
       }
     } catch (err) {
       console.error('Error checking sync status:', err);

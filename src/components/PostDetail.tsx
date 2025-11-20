@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, ensureHttps } from '../lib/supabase';
 import { CivitaiImage } from '../lib/civitai';
-import { Pencil, PencilOff, RefreshCw, ExternalLink, Download, Play, Settings, Info } from 'lucide-react';
+import { Pencil, PencilOff, RefreshCw, ExternalLink, Download, Play, Settings, Info, ArrowLeft, ArrowRight } from 'lucide-react';
 import JSZip from 'jszip';
 import { useSwipeable } from 'react-swipeable';
 
@@ -63,6 +63,27 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
     fetchPost();
     fetchAdjacentPosts();
   }, [postId, sourceView, creatorUsername]);
+
+  // Keyboard navigation for prev/next posts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' && prevPostId) {
+        console.log(`⬅️ Left arrow key pressed - navigating to prev post: ${prevPostId}`);
+        onNavigatePost?.(prevPostId);
+      } else if (e.key === 'ArrowRight' && nextPostId) {
+        console.log(`➡️ Right arrow key pressed - navigating to next post: ${nextPostId}`);
+        onNavigatePost?.(nextPostId);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [prevPostId, nextPostId, onNavigatePost]);
 
   async function fetchAdjacentPosts() {
     try {
@@ -1125,34 +1146,33 @@ export const PostDetail = ({ postId, onImageClick, onBack, onNavigatePost, onCre
         })}
       </div>
 
-      {/* Previous/Next Navigation */}
+      {/* Previous/Next Navigation - Floating Buttons */}
       {(prevPostId || nextPostId) && (
-        <div className="mt-8 flex items-center justify-center gap-4">
-          <button
-            onClick={() => {
-              console.log(`⬅️ Prev button clicked - prevPostId: ${prevPostId}`);
-              if (prevPostId) {
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 z-50">
+          {prevPostId && (
+            <button
+              onClick={() => {
+                console.log(`⬅️ Prev button clicked - prevPostId: ${prevPostId}`);
                 onNavigatePost?.(prevPostId);
-              }
-            }}
-            disabled={!prevPostId}
-            className="w-32 px-6 py-3 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            Prev
-          </button>
-          <button
-            onClick={() => nextPostId && onNavigatePost?.(nextPostId)}
-            disabled={!nextPostId}
-            className="w-32 px-6 py-3 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            Next
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+              }}
+              className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-red-600 hover:text-white transition-colors"
+              title="Previous post"
+            >
+              <ArrowLeft className="w-6 h-6" />
+            </button>
+          )}
+          {nextPostId && (
+            <button
+              onClick={() => {
+                console.log(`➡️ Next button clicked - nextPostId: ${nextPostId}`);
+                onNavigatePost?.(nextPostId);
+              }}
+              className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-red-600 hover:text-white transition-colors"
+              title="Next post"
+            >
+              <ArrowRight className="w-6 h-6" />
+            </button>
+          )}
         </div>
       )}
     </div>

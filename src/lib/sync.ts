@@ -427,17 +427,42 @@ export async function syncAllCreators(onProgress?: ProgressCallback): Promise<vo
     return;
   }
 
-  console.log(`📋 Found ${creators.length} creators to sync for user ${user.email}`);
+  console.log(`📋 Found ${creators.length} creators to check for user ${user.email}`);
 
-  // Sync each creator sequentially
+  // Check each creator for new posts using lightweight check
   for (const creator of creators) {
-    await syncCreator(creator.username, onProgress, { userId: user.id });
+    try {
+      // If sync_status is 'pending', skip the lightweight check and force full sync
+      if (creator.sync_status === 'pending') {
+        console.log(`⚡ ${creator.username} is pending - running full sync`);
+        await syncCreator(creator.username, onProgress, { userId: user.id });
+      } else {
+        // Do lightweight check first
+        const hasNewPosts = await checkForNewPosts(creator.username, user.id);
 
-    // Add delay between creators to avoid rate limiting
-    await sleep(10000);
+        if (hasNewPosts) {
+          console.log(`🔄 ${creator.username} has new posts - syncing...`);
+          await syncCreator(creator.username, onProgress, { userId: user.id });
+        } else {
+          // No new posts, just update the timestamp
+          console.log(`✅ ${creator.username} is up to date - updating timestamp`);
+          await supabase
+            .from('creators')
+            .update({ last_synced_at: new Date().toISOString() })
+            .eq('username', creator.username)
+            .eq('user_id', user.id);
+        }
+      }
+
+      // Add delay between creators to avoid rate limiting (reduced from 10s to 3s since we're doing lightweight checks)
+      await sleep(3000);
+    } catch (error) {
+      console.error(`Error processing ${creator.username}:`, error);
+      // Continue with next creator
+    }
   }
 
-  console.log('✅ All creators synced');
+  console.log('✅ All creators checked/synced');
 }
 
 /**
@@ -522,6 +547,57 @@ export async function syncIncompletePosts(username: string): Promise<void> {
   }
 
   console.log(`✅ Completed syncing ${incompletePosts.length} posts for ${username}`);
+}
+
+/**
+ * Lightweight check if a creator has new posts since last sync
+ * Only fetches first page (10 items) instead of full sync
+ */
+export async function checkForNewPosts(username: string, userId: string): Promise<boolean> {
+  try {
+    // Get last sync time from DB
+    const { data: creator } = await supabase
+      .from('creators')
+      .select('last_synced_at')
+      .eq('username', username)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!creator?.last_synced_at) {
+      // Never synced, needs full sync
+      return true;
+    }
+
+    const lastSync = new Date(creator.last_synced_at);
+    console.log(`🔍 Checking ${username} for new posts since ${lastSync.toISOString()}`);
+
+    // Fetch just the first page (10 items) from Civitai
+    const response = await fetchImagesByUsername(username, 10);
+
+    if (!response.items || response.items.length === 0) {
+      console.log(`  ✅ ${username} - No posts found`);
+      return false;
+    }
+
+    // Check if ANY post is newer than last sync
+    const hasNewPosts = response.items.some(img => {
+      if (!img.createdAt) return false;
+      const postDate = new Date(img.createdAt);
+      return postDate > lastSync;
+    });
+
+    if (hasNewPosts) {
+      console.log(`  ✨ ${username} - Found new posts!`);
+    } else {
+      console.log(`  ✅ ${username} - No new posts`);
+    }
+
+    return hasNewPosts;
+  } catch (error) {
+    console.error(`Error checking for new posts for ${username}:`, error);
+    // On error, assume there might be new posts (safer to sync)
+    return true;
+  }
 }
 
 /**
