@@ -35,7 +35,9 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
     post.coverImageUrl.endsWith('.mp4') ? 'video' : 'image'
   );
   const [videoFailed, setVideoFailed] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   // Cleanup video when component unmounts to prevent memory leaks
   useEffect(() => {
@@ -85,20 +87,25 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
               <video
                 ref={videoRef}
                 src={ensureHttps(post.coverImageUrl)}
-                className="w-full h-auto relative z-10"
+                className="w-full h-auto relative z-10 transition-opacity duration-300"
+                style={{ opacity: imageLoaded ? 1 : 0 }}
                 autoPlay
                 muted
                 loop
                 playsInline
                 preload="metadata"
                 onError={handleVideoError}
+                onLoadedData={() => setImageLoaded(true)}
               />
             ) : (
               <img
+                ref={imageRef}
                 src={ensureHttps(post.coverImageUrl)}
                 alt={`Post ${post.postId} by ${post.username}`}
-                className="w-full h-auto relative z-10"
+                className="w-full h-auto relative z-10 transition-opacity duration-300"
+                style={{ opacity: imageLoaded ? 1 : 0 }}
                 loading="lazy"
+                onLoad={() => setImageLoaded(true)}
               />
             )
           ) : (
