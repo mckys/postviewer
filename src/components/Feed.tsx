@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase, getUserNSFWPreference, ensureHttps } from '../lib/supabase';
 import Masonry from 'react-masonry-css';
 import { ArrowUp } from 'lucide-react';
@@ -31,11 +31,22 @@ interface PostCardProps {
 }
 
 const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggleHide }: PostCardProps) => {
-  const [imageLoaded, setImageLoaded] = useState(false);
   const [mediaType, setMediaType] = useState<'video' | 'image'>(
     post.coverImageUrl.endsWith('.mp4') ? 'video' : 'image'
   );
   const [videoFailed, setVideoFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Cleanup video when component unmounts to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.src = '';
+        videoRef.current.load();
+      }
+    };
+  }, []);
 
   const handleVideoError = () => {
     // If video fails to load and it's an .mp4, try rendering as image instead
@@ -72,23 +83,22 @@ const PostCard = ({ post, onPostClick, onCreatorClick, onToggleFavorite, onToggl
           {post.coverImageUrl ? (
             mediaType === 'video' ? (
               <video
+                ref={videoRef}
                 src={ensureHttps(post.coverImageUrl)}
                 className="w-full h-auto relative z-10"
-                style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
                 autoPlay
                 muted
                 loop
                 playsInline
+                preload="metadata"
                 onError={handleVideoError}
-                onLoadedMetadata={() => setImageLoaded(true)}
               />
             ) : (
               <img
                 src={ensureHttps(post.coverImageUrl)}
                 alt={`Post ${post.postId} by ${post.username}`}
                 className="w-full h-auto relative z-10"
-                style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease-in' }}
-                onLoad={() => setImageLoaded(true)}
+                loading="lazy"
               />
             )
           ) : (
